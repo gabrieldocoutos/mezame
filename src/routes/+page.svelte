@@ -1,156 +1,179 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
+  import { open, save } from "@tauri-apps/plugin-dialog"; 
 
-  let name = $state("");
-  let greetMsg = $state("");
+  let content = $state("");
+  let filePath = $state<string | null>(null);
+  let savedContent = $state("");
 
-  async function greet(event: Event) {
-    event.preventDefault();
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    greetMsg = await invoke("greet", { name });
+  const isDirty = $derived(content !== savedContent);
+  const title = $derived(
+    (filePath ? filePath.split("/").at(-1) : "Untitled") + (isDirty ? " •" : "")
+  );
+
+  async function newFile() {
+    if (isDirty && !confirm("Discard unsaved changes?")) return;
+    content = "";
+    savedContent = "";
+    filePath = null;
+  }
+
+  async function openFile() {
+    if (isDirty && !confirm("Discard unsaved changes?")) return;
+    const selected = await open({ multiple: false, directory: false });
+    if (!selected) return;
+    const path = typeof selected === "string" ? selected : selected[0];
+    try {
+      const text = await invoke<string>("read_file", { path });
+      content = text;
+      savedContent = text;
+      filePath = path;
+    } catch (e) {
+      alert("Could not open file: " + e);
+    }
+  }
+
+  async function saveFile() {
+    if (!filePath) return saveAs();
+    try {
+      await invoke("write_file", { path: filePath, content });
+      savedContent = content;
+    } catch (e) {
+      alert("Could not save file: " + e);
+    }
+  }
+
+  async function saveAs() {
+    const path = await save({
+      defaultPath: filePath ?? "untitled.txt",
+      filters: [{ name: "Text", extensions: ["txt", "md", "json", "js", "ts", "rs", "*"] }],
+    });
+    if (!path) return;
+    filePath = path;
+    await saveFile();
+  }
+
+  function onKeyDown(e: KeyboardEvent) {
+    if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+      e.preventDefault();
+      if (e.shiftKey) saveAs();
+      else saveFile();
+    }
+    if ((e.metaKey || e.ctrlKey) && e.key === "o") {
+      e.preventDefault();
+      openFile();
+    }
+    if ((e.metaKey || e.ctrlKey) && e.key === "n") {
+      e.preventDefault();
+      newFile();
+    }
   }
 </script>
 
-<main class="container">
-  <h1>Welcome to Tauri + Svelte</h1>
+<svelte:window onkeydown={onKeyDown} />
 
-  <div class="row">
-    <a href="https://vite.dev" target="_blank">
-      <img src="/vite.svg" class="logo vite" alt="Vite Logo" />
-    </a>
-    <a href="https://tauri.app" target="_blank">
-      <img src="/tauri.svg" class="logo tauri" alt="Tauri Logo" />
-    </a>
-    <a href="https://svelte.dev" target="_blank">
-      <img src="/svelte.svg" class="logo svelte-kit" alt="SvelteKit Logo" />
-    </a>
-  </div>
-  <p>Click on the Tauri, Vite, and SvelteKit logos to learn more.</p>
+<div class="app">
+  <header>
+    <span class="filename">{title}</span>
+    <div class="actions">
+      <button onclick={newFile}>New</button>
+      <button onclick={openFile}>Open</button>
+      <button onclick={saveFile} disabled={!isDirty}>Save</button>
+      <button onclick={saveAs}>Save As</button>
+    </div>
+  </header>
 
-  <form class="row" onsubmit={greet}>
-    <input id="greet-input" placeholder="Enter a name..." bind:value={name} />
-    <button type="submit">Greet</button>
-  </form>
-  <p>{greetMsg}</p>
-</main>
+  <textarea
+    bind:value={content}
+    spellcheck="false"
+    autocomplete="off"
+    autocorrect="off"
+    autocapitalize="off"
+    placeholder="Start typing..."
+  ></textarea>
+</div>
 
 <style>
-.logo.vite:hover {
-  filter: drop-shadow(0 0 2em #747bff);
-}
-
-.logo.svelte-kit:hover {
-  filter: drop-shadow(0 0 2em #ff3e00);
-}
-
-:root {
-  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 16px;
-  line-height: 24px;
-  font-weight: 400;
-
-  color: #0f0f0f;
-  background-color: #f6f6f6;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  -webkit-text-size-adjust: 100%;
-}
-
-.container {
-  margin: 0;
-  padding-top: 10vh;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  text-align: center;
-}
-
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: 0.75s;
-}
-
-.logo.tauri:hover {
-  filter: drop-shadow(0 0 2em #24c8db);
-}
-
-.row {
-  display: flex;
-  justify-content: center;
-}
-
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-
-a:hover {
-  color: #535bf2;
-}
-
-h1 {
-  text-align: center;
-}
-
-input,
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  color: #0f0f0f;
-  background-color: #ffffff;
-  transition: border-color 0.25s;
-  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.2);
-}
-
-button {
-  cursor: pointer;
-}
-
-button:hover {
-  border-color: #396cd8;
-}
-button:active {
-  border-color: #396cd8;
-  background-color: #e8e8e8;
-}
-
-input,
-button {
-  outline: none;
-}
-
-#greet-input {
-  margin-right: 5px;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    color: #f6f6f6;
-    background-color: #2f2f2f;
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
   }
 
-  a:hover {
-    color: #24c8db;
+  :global(body) {
+    overflow: hidden;
   }
 
-  input,
+  .app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    font-family: "Menlo", "Monaco", "Courier New", monospace;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px;
+    background: #2d2d2d;
+    border-bottom: 1px solid #3d3d3d;
+    flex-shrink: 0;
+    user-select: none;
+  }
+
+  .filename {
+    font-size: 13px;
+    color: #aaa;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 60%;
+  }
+
+  .actions {
+    display: flex;
+    gap: 6px;
+  }
+
   button {
-    color: #ffffff;
-    background-color: #0f0f0f98;
+    background: #3a3a3a;
+    color: #d4d4d4;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 3px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: inherit;
   }
-  button:active {
-    background-color: #0f0f0f69;
-  }
-}
 
+  button:hover:not(:disabled) {
+    background: #4a4a4a;
+  }
+
+  button:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  textarea {
+    flex: 1;
+    width: 100%;
+    padding: 16px 20px;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    border: none;
+    outline: none;
+    resize: none;
+    font-family: "Menlo", "Monaco", "Courier New", monospace;
+    font-size: 14px;
+    line-height: 1.6;
+    tab-size: 2;
+  }
+
+  textarea::placeholder {
+    color: #555;
+  }
 </style>

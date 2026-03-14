@@ -1,71 +1,35 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
-  import { open, save } from "@tauri-apps/plugin-dialog"; 
+  import Pomodoro from "./Pomodoro.svelte";
+
+  let activeTab = $state<'editor' | 'pomodoro'>('editor');
 
   let content = $state("");
-  let filePath = $state<string | null>(null);
   let savedContent = $state("");
 
   const isDirty = $derived(content !== savedContent);
-  const title = $derived(
-    (filePath ? filePath.split("/").at(-1) : "Untitled") + (isDirty ? " •" : "")
-  );
 
-  async function newFile() {
-    if (isDirty && !confirm("Discard unsaved changes?")) return;
-    content = "";
-    savedContent = "";
-    filePath = null;
-  }
-
-  async function openFile() {
-    if (isDirty && !confirm("Discard unsaved changes?")) return;
-    const selected = await open({ multiple: false, directory: false });
-    if (!selected) return;
-    const path = typeof selected === "string" ? selected : selected[0];
-    try {
-      const text = await invoke<string>("read_file", { path });
+  $effect(() => {
+    invoke<string>("load_notes").then((text) => {
       content = text;
       savedContent = text;
-      filePath = path;
-    } catch (e) {
-      alert("Could not open file: " + e);
-    }
-  }
+    });
+  });
 
-  async function saveFile() {
-    if (!filePath) return saveAs();
+  async function save() {
     try {
-      await invoke("write_file", { path: filePath, content });
+      await invoke("save_notes", { content });
       savedContent = content;
     } catch (e) {
-      alert("Could not save file: " + e);
+      alert("Could not save: " + e);
     }
-  }
-
-  async function saveAs() {
-    const path = await save({
-      defaultPath: filePath ?? "untitled.txt",
-      filters: [{ name: "Text", extensions: ["txt", "md", "json", "js", "ts", "rs", "*"] }],
-    });
-    if (!path) return;
-    filePath = path;
-    await saveFile();
   }
 
   function onKeyDown(e: KeyboardEvent) {
+    if (activeTab !== 'editor') return;
     if ((e.metaKey || e.ctrlKey) && e.key === "s") {
       e.preventDefault();
-      if (e.shiftKey) saveAs();
-      else saveFile();
-    }
-    if ((e.metaKey || e.ctrlKey) && e.key === "o") {
-      e.preventDefault();
-      openFile();
-    }
-    if ((e.metaKey || e.ctrlKey) && e.key === "n") {
-      e.preventDefault();
-      newFile();
+      save();
     }
   }
 </script>
@@ -74,23 +38,37 @@
 
 <div class="app">
   <header>
-    <span class="filename">{title}</span>
-    <div class="actions">
-      <button onclick={newFile}>New</button>
-      <button onclick={openFile}>Open</button>
-      <button onclick={saveFile} disabled={!isDirty}>Save</button>
-      <button onclick={saveAs}>Save As</button>
-    </div>
+    <nav>
+      <button
+        class="tab"
+        class:active={activeTab === 'editor'}
+        onclick={() => activeTab = 'editor'}
+      >Editor</button>
+      <button
+        class="tab"
+        class:active={activeTab === 'pomodoro'}
+        onclick={() => activeTab = 'pomodoro'}
+      >Pomodoro</button>
+    </nav>
+
+    {#if activeTab === 'editor'}
+      <div class="editor-bar">
+        <span class="filename">Notes{isDirty ? ' •' : ''}</span>
+        <button onclick={save} disabled={!isDirty}>Save</button>
+      </div>
+    {/if}
   </header>
 
-  <textarea
-    bind:value={content}
-    spellcheck="false"
-    autocomplete="off"
-    autocorrect="off"
-    autocapitalize="off"
-    placeholder="Start typing..."
-  ></textarea>
+  {#if activeTab === 'editor'}
+    <textarea
+      bind:value={content}
+      spellcheck="false"
+      autocomplete="off"
+      placeholder="Start typing..."
+    ></textarea>
+  {:else}
+    <Pomodoro />
+  {/if}
 </div>
 
 <style>
@@ -116,26 +94,54 @@
   header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 6px 12px;
     background: #2d2d2d;
     border-bottom: 1px solid #3d3d3d;
     flex-shrink: 0;
     user-select: none;
+    min-height: 34px;
+  }
+
+  nav {
+    display: flex;
+    flex-shrink: 0;
+  }
+
+  .tab {
+    background: transparent;
+    color: #888;
+    border: none;
+    border-right: 1px solid #3d3d3d;
+    border-radius: 0;
+    padding: 6px 16px;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: inherit;
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s;
+  }
+
+  .tab:hover {
+    color: #ccc;
+    background: #333;
+  }
+
+  .tab.active {
+    color: #d4d4d4;
+    border-bottom-color: #569cd6;
+    background: #2d2d2d;
+  }
+
+  .editor-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex: 1;
+    padding: 0 12px;
   }
 
   .filename {
     font-size: 13px;
     color: #aaa;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    max-width: 60%;
-  }
-
-  .actions {
-    display: flex;
-    gap: 6px;
   }
 
   button {

@@ -50,7 +50,7 @@
 <svelte:window onkeydown={onKeyDown} />
 
 <div class="app">
-  <header>
+  <header data-tauri-drag-region>
     <nav>
       <button
         class="tab"
@@ -98,8 +98,11 @@
     padding: 0;
   }
 
+  :global(html),
   :global(body) {
     overflow: hidden;
+    background: #1e1e1e;
+    margin: 0;
   }
 
   .app {
@@ -119,6 +122,8 @@
     flex-shrink: 0;
     user-select: none;
     min-height: 34px;
+    padding-top: 28px;
+    padding-left: 80px;
   }
 
   nav {

@@ -1,10 +1,42 @@
 use std::process::Command;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager,
+    Emitter, Manager,
 };
+
+const WORK_SECS: u32 = 25 * 60;
+const BREAK_SECS: u32 = 5 * 60;
+
+#[derive(Clone, serde::Serialize)]
+struct PomodoroState {
+    mode: String,
+    remaining: u32,
+    running: bool,
+    completed_sessions: u32,
+}
+
+type PomodoroShared = Arc<Mutex<PomodoroState>>;
+
+fn update_tray_from_state(app: &tauri::AppHandle, s: &PomodoroState) {
+    let title = if !s.running && s.mode == "work" && s.remaining == WORK_SECS {
+        String::new()
+    } else if !s.running && s.mode == "break" && s.remaining == BREAK_SECS {
+        String::new()
+    } else {
+        let m = s.remaining / 60;
+        let sec = s.remaining % 60;
+        if s.running {
+            format!("{:02}:{:02}", m, sec)
+        } else {
+            format!("⏸ {:02}:{:02}", m, sec)
+        }
+    };
+    if let Some(tray) = app.tray_by_id("main") {
+        tray.set_title(Some(title.as_str())).ok();
+    }
+}
 
 const BLOCK_START: &str = "### nelson";
 const BLOCK_END: &str = "### nelson end";
@@ -170,13 +202,6 @@ fn save_domains(app: tauri::AppHandle, domains: Vec<String>) -> Result<(), Strin
     std::fs::write(dir.join("domains.txt"), domains.join("\n")).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
-fn update_tray_title(app: tauri::AppHandle, title: String) -> Result<(), String> {
-    if let Some(tray) = app.tray_by_id("main") {
-        tray.set_title(Some(title.as_str())).map_err(|e| e.to_string())?;
-    }
-    Ok(())
-}
 
 #[tauri::command]
 fn get_blocking_status() -> bool {
@@ -205,9 +230,58 @@ fn write_blocked(domains: Vec<String>) -> Result<(), String> {
     write_hosts_with_sudo(&new_hosts)
 }
 
+#[tauri::command]
+fn pomodoro_get_state(state: tauri::State<PomodoroShared>) -> PomodoroState {
+    state.lock().unwrap().clone()
+}
+
+#[tauri::command]
+fn pomodoro_toggle(app: tauri::AppHandle, state: tauri::State<PomodoroShared>) {
+    let s = {
+        let mut s = state.lock().unwrap();
+        s.running = !s.running;
+        s.clone()
+    };
+    update_tray_from_state(&app, &s);
+    app.emit("pomodoro-tick", &s).ok();
+}
+
+#[tauri::command]
+fn pomodoro_reset(app: tauri::AppHandle, state: tauri::State<PomodoroShared>) {
+    let s = {
+        let mut s = state.lock().unwrap();
+        s.running = false;
+        s.remaining = if s.mode == "work" { WORK_SECS } else { BREAK_SECS };
+        s.clone()
+    };
+    update_tray_from_state(&app, &s);
+    app.emit("pomodoro-tick", &s).ok();
+}
+
+#[tauri::command]
+fn pomodoro_skip_break(app: tauri::AppHandle, state: tauri::State<PomodoroShared>) {
+    let s = {
+        let mut s = state.lock().unwrap();
+        s.running = false;
+        s.mode = "work".into();
+        s.remaining = WORK_SECS;
+        s.clone()
+    };
+    update_tray_from_state(&app, &s);
+    app.emit("pomodoro-tick", &s).ok();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let pomodoro: PomodoroShared = Arc::new(Mutex::new(PomodoroState {
+        mode: "work".into(),
+        remaining: WORK_SECS,
+        running: false,
+        completed_sessions: 0,
+    }));
+
     tauri::Builder::default()
+        .manage(pomodoro)
         .setup(|app| {
             let show = MenuItemBuilder::with_id("show", "Show").build(app)?;
             let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
@@ -248,6 +322,36 @@ pub fn run() {
                 })
                 .build(app)?;
 
+            let pomodoro = app.state::<PomodoroShared>().inner().clone();
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                loop {
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    let state = {
+                        let mut s = pomodoro.lock().unwrap();
+                        if s.running {
+                            if s.remaining > 0 {
+                                s.remaining -= 1;
+                            }
+                            if s.remaining == 0 {
+                                s.running = false;
+                                if s.mode == "work" {
+                                    s.completed_sessions += 1;
+                                    s.mode = "break".into();
+                                    s.remaining = BREAK_SECS;
+                                } else {
+                                    s.mode = "work".into();
+                                    s.remaining = WORK_SECS;
+                                }
+                            }
+                        }
+                        s.clone()
+                    };
+                    update_tray_from_state(&app_handle, &state);
+                    app_handle.emit("pomodoro-tick", &state).ok();
+                }
+            });
+
             Ok(())
         })
         .plugin(tauri_plugin_opener::init())
@@ -260,7 +364,10 @@ pub fn run() {
             read_domains,
             save_domains,
             get_blocking_status,
-            update_tray_title
+            pomodoro_get_state,
+            pomodoro_toggle,
+            pomodoro_reset,
+            pomodoro_skip_break,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

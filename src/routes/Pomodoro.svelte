@@ -1,12 +1,12 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
+  import { listen } from '@tauri-apps/api/event';
+  import { onDestroy } from 'svelte';
 
-  const WORK_DURATION = 25 * 60;
-  const BREAK_DURATION = 5 * 60;
   const ROUND_SIZE = 4;
 
   let mode = $state<'work' | 'break'>('work');
-  let remaining = $state(WORK_DURATION);
+  let remaining = $state(25 * 60);
   let running = $state(false);
   let completedSessions = $state(0);
 
@@ -14,57 +14,24 @@
   const seconds = $derived(String(remaining % 60).padStart(2, '0'));
   const doneInRound = $derived(completedSessions % ROUND_SIZE);
 
-  const WORK_FULL = WORK_DURATION;
-  const BREAK_FULL = BREAK_DURATION;
+  type Payload = { mode: string; remaining: number; running: boolean; completed_sessions: number };
 
-  $effect(() => {
-    const isIdleWork = !running && mode === 'work' && remaining === WORK_FULL;
-    const isIdleBreak = !running && mode === 'break' && remaining === BREAK_FULL;
-    const isIdle = isIdleWork || isIdleBreak;
-    let title: string;
-    if (isIdle) {
-      title = '';
-    } else if (running) {
-      title = `${minutes}:${seconds}`;
-    } else {
-      title = `⏸ ${minutes}:${seconds}`;
-    }
-    invoke('update_tray_title', { title });
-  });
-
-  $effect(() => {
-    if (!running) return;
-    const id = setInterval(() => {
-      remaining -= 1;
-      if (remaining <= 0) {
-        running = false;
-        if (mode === 'work') {
-          completedSessions += 1;
-          mode = 'break';
-          remaining = BREAK_DURATION;
-        } else {
-          mode = 'work';
-          remaining = WORK_DURATION;
-        }
-      }
-    }, 1000);
-    return () => clearInterval(id);
-  });
-
-  function toggle() {
-    running = !running;
+  function applyState(s: Payload) {
+    mode = s.mode as 'work' | 'break';
+    remaining = s.remaining;
+    running = s.running;
+    completedSessions = s.completed_sessions;
   }
 
-  function reset() {
-    running = false;
-    remaining = mode === 'work' ? WORK_DURATION : BREAK_DURATION;
-  }
+  invoke<Payload>('pomodoro_get_state').then(applyState);
 
-  function skipBreak() {
-    running = false;
-    mode = 'work';
-    remaining = WORK_DURATION;
-  }
+  const unlisten = listen<Payload>('pomodoro-tick', ({ payload }) => applyState(payload));
+
+  onDestroy(async () => { (await unlisten)(); });
+
+  function toggle() { invoke('pomodoro_toggle'); }
+  function reset() { invoke('pomodoro_reset'); }
+  function skipBreak() { invoke('pomodoro_skip_break'); }
 </script>
 
 <div class="pomodoro">

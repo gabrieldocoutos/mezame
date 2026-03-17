@@ -1,15 +1,12 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
+  import Editor from "./Editor.svelte";
   import Pomodoro from "./Pomodoro.svelte";
   import BlockedWebsites from "./BlockedWebsites.svelte";
 
   let activeTab = $state<'editor' | 'pomodoro' | 'blocked'>('editor');
 
-  // Editor state
-  let content = $state("");
-  let savedContent = $state("");
-
-  const isDirty = $derived(content !== savedContent);
+  let editorDirty = $state(false);
 
   // Blocked websites state
   let blockedDomains = $state<string[]>([]);
@@ -23,10 +20,6 @@
   let passwordError = $state('');
 
   $effect(() => {
-    invoke<string>("load_notes").then((text) => {
-      content = text;
-      savedContent = text;
-    });
     invoke<string[]>("read_domains").then((domains) => {
       blockedDomains = domains;
     });
@@ -34,15 +27,6 @@
       blockingActive = active;
     });
   });
-
-  async function save() {
-    try {
-      await invoke("save_notes", { content });
-      savedContent = content;
-    } catch (e) {
-      alert("Could not save: " + e);
-    }
-  }
 
   async function saveBlocked(domains: string[]) {
     await invoke("save_domains", { domains });
@@ -99,17 +83,7 @@
     pendingPassword = '';
     toggling = false;
   }
-
-  function onKeyDown(e: KeyboardEvent) {
-    if (activeTab !== 'editor') return;
-    if ((e.metaKey || e.ctrlKey) && e.key === "s") {
-      e.preventDefault();
-      save();
-    }
-  }
 </script>
-
-<svelte:window onkeydown={onKeyDown} />
 
 <div class="app">
   <header data-tauri-drag-region>
@@ -119,7 +93,7 @@
         class:active={activeTab === 'editor'}
         onclick={() => activeTab = 'editor'}
       >Editor
-      <span class="filename">{isDirty ? ' •' : ''}</span></button>
+      <span class="filename">{editorDirty ? ' •' : ''}</span></button>
       <button
         class="tab"
         class:active={activeTab === 'pomodoro'}
@@ -136,24 +110,7 @@
   </header>
 
   {#if activeTab === 'editor'}
-    <textarea
-      bind:value={content}
-      spellcheck="false"
-      autocomplete="off"
-      placeholder="Start typing..."
-      onkeydown={(e) => {
-        if (e.key === 'Tab') {
-          e.preventDefault();
-          const el = e.currentTarget;
-          const start = el.selectionStart;
-          const end = el.selectionEnd;
-          content = content.slice(0, start) + '    ' + content.slice(end);
-          requestAnimationFrame(() => {
-            el.selectionStart = el.selectionEnd = start + 4;
-          });
-        }
-      }}
-    ></textarea>
+    <Editor bind:isDirty={editorDirty} isActive={true} />
   {:else if activeTab === 'pomodoro'}
     <Pomodoro />
   {:else}
@@ -283,25 +240,6 @@
   button:disabled {
     opacity: 0.4;
     cursor: default;
-  }
-
-  textarea {
-    flex: 1;
-    width: 100%;
-    padding: 16px 20px;
-    background: #1e1e1e;
-    color: #d4d4d4;
-    border: none;
-    outline: none;
-    resize: none;
-    font-family: "Menlo", "Monaco", "Courier New", monospace;
-    font-size: 14px;
-    line-height: 1.6;
-    tab-size: 2;
-  }
-
-  textarea::placeholder {
-    color: #555;
   }
 
   .productivity-switch {

@@ -118,7 +118,8 @@
         class="tab"
         class:active={activeTab === 'editor'}
         onclick={() => activeTab = 'editor'}
-      >Editor</button>
+      >Editor
+      <span class="filename">{isDirty ? ' •' : ''}</span></button>
       <button
         class="tab"
         class:active={activeTab === 'pomodoro'}
@@ -131,12 +132,7 @@
       >Blocked</button>
     </nav>
 
-    {#if activeTab === 'editor'}
-      <div class="editor-bar">
-        <span class="filename">Notes{isDirty ? ' •' : ''}</span>
-        <button onclick={save} disabled={!isDirty}>Save</button>
-      </div>
-    {/if}
+    
   </header>
 
   {#if activeTab === 'editor'}
@@ -167,7 +163,7 @@
 
 {#if showPasswordModal}
   <div class="modal-backdrop" role="presentation" onclick={cancelPassword}>
-    <div class="modal" role="dialog" onclick={(e) => e.stopPropagation()}>
+    <div class="modal" role="dialog" tabindex="0" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
       <p class="modal-title">Administrator password</p>
       <p class="modal-sub">Required to modify /etc/hosts. Stored for this session.</p>
       <input
@@ -176,7 +172,6 @@
         placeholder="Password"
         bind:value={pendingPassword}
         onkeydown={(e) => e.key === 'Enter' && submitPassword()}
-        autofocus
       />
       {#if passwordError}<p class="modal-error">{passwordError}</p>{/if}
       <div class="modal-actions">
@@ -263,14 +258,6 @@
     color: #d4d4d4;
     border-bottom-color: #569cd6;
     background: #2d2d2d;
-  }
-
-  .editor-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex: 1;
-    padding: 0 12px;
   }
 
   .filename {

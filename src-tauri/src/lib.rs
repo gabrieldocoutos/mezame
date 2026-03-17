@@ -9,6 +9,12 @@ use tauri::{
 const WORK_SECS: u32 = 25 * 60;
 const BREAK_SECS: u32 = 5 * 60;
 
+#[derive(serde::Serialize, serde::Deserialize)]
+struct Reminder {
+    id: String,
+    title: String,
+}
+
 #[derive(Clone, serde::Serialize)]
 struct PomodoroState {
     mode: String,
@@ -230,6 +236,40 @@ fn write_blocked(domains: Vec<String>) -> Result<(), String> {
     write_hosts_with_sudo(&new_hosts)
 }
 
+async fn run_sidecar(app: &tauri::AppHandle, args: &[&str]) -> Result<String, String> {
+    use tauri_plugin_shell::ShellExt;
+    let output = app
+        .shell()
+        .sidecar("reminders-helper")
+        .map_err(|e| e.to_string())?
+        .args(args)
+        .output()
+        .await
+        .map_err(|e| e.to_string())?;
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).to_string());
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+#[tauri::command]
+async fn get_reminders(app: tauri::AppHandle) -> Result<Vec<Reminder>, String> {
+    let json = run_sidecar(&app, &["list"]).await?;
+    serde_json::from_str::<Vec<Reminder>>(&json).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn create_reminder(app: tauri::AppHandle, title: String) -> Result<(), String> {
+    run_sidecar(&app, &["create", &title]).await?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn complete_reminder(app: tauri::AppHandle, id: String) -> Result<(), String> {
+    run_sidecar(&app, &["complete", &id]).await?;
+    Ok(())
+}
+
 #[tauri::command]
 fn pomodoro_get_state(state: tauri::State<PomodoroShared>) -> PomodoroState {
     state.lock().unwrap().clone()
@@ -354,6 +394,7 @@ pub fn run() {
 
             Ok(())
         })
+        .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             load_notes,
@@ -368,6 +409,9 @@ pub fn run() {
             pomodoro_toggle,
             pomodoro_reset,
             pomodoro_skip_break,
+            get_reminders,
+            create_reminder,
+            complete_reminder,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

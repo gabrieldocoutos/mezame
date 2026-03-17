@@ -3,8 +3,9 @@
   import Editor from "./Editor.svelte";
   import Pomodoro from "./Pomodoro.svelte";
   import BlockedWebsites from "./BlockedWebsites.svelte";
+  import Reminders from "./Reminders.svelte";
 
-  let activeTab = $state<'editor' | 'pomodoro' | 'blocked'>('editor');
+  let activeTab = $state<'editor' | 'pomodoro' | 'blocked' | 'reminders'>('editor');
 
   let editorDirty = $state(false);
 
@@ -104,6 +105,11 @@
         class:active={activeTab === 'blocked'}
         onclick={() => activeTab = 'blocked'}
       >Blocked</button>
+      <button
+        class="tab"
+        class:active={activeTab === 'reminders'}
+        onclick={() => activeTab = 'reminders'}
+      >Reminders</button>
     </nav>
 
     
@@ -113,8 +119,10 @@
     <Editor bind:isDirty={editorDirty} isActive={true} />
   {:else if activeTab === 'pomodoro'}
     <Pomodoro />
-  {:else}
+  {:else if activeTab === 'blocked'}
     <BlockedWebsites domains={blockedDomains} onSave={saveBlocked} />
+  {:else}
+    <Reminders />
   {/if}
 </div>
 

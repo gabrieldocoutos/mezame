@@ -51,13 +51,70 @@ const HOSTS_TMP: &str = "/tmp/nelson_hosts_tmp";
 
 static CACHED_PASSWORD: Mutex<Option<String>> = Mutex::new(None);
 
-#[tauri::command]
-fn load_notes(app: tauri::AppHandle) -> Result<String, String> {
-    let path = app
+fn notes_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    let dir = app
         .path()
         .app_data_dir()
         .map_err(|e| e.to_string())?
-        .join("notes.txt");
+        .join("notes");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir)
+}
+
+fn migrate_legacy_notes(app: &tauri::AppHandle) {
+    let data_dir = match app.path().app_data_dir() {
+        Ok(d) => d,
+        Err(_) => return,
+    };
+    let legacy = data_dir.join("notes.txt");
+    if !legacy.exists() {
+        return;
+    }
+    let notes_subdir = data_dir.join("notes");
+    if std::fs::create_dir_all(&notes_subdir).is_ok() {
+        let dest = notes_subdir.join("Notes.txt");
+        if !dest.exists() {
+            let _ = std::fs::copy(&legacy, &dest);
+        }
+        let _ = std::fs::remove_file(&legacy);
+    }
+}
+
+fn sanitize_name(name: &str) -> Result<String, String> {
+    let s = name.trim().to_string();
+    if s.is_empty() {
+        return Err("Note name cannot be empty".into());
+    }
+    if s.contains('/') || s.contains('\\') || s.contains('\0') || s.starts_with('.') {
+        return Err("Invalid note name".into());
+    }
+    Ok(s)
+}
+
+#[tauri::command]
+fn list_notes(app: tauri::AppHandle) -> Result<Vec<String>, String> {
+    migrate_legacy_notes(&app);
+    let dir = notes_dir(&app)?;
+    let mut names: Vec<String> = std::fs::read_dir(&dir)
+        .map_err(|e| e.to_string())?
+        .filter_map(|entry| {
+            let entry = entry.ok()?;
+            let name = entry.file_name();
+            let name_str = name.to_str()?.to_string();
+            name_str.strip_suffix(".txt").map(|s| s.to_string())
+        })
+        .collect();
+    names.sort();
+    if names.is_empty() {
+        std::fs::write(dir.join("Notes.txt"), "").map_err(|e| e.to_string())?;
+        names.push("Notes".to_string());
+    }
+    Ok(names)
+}
+
+#[tauri::command]
+fn load_note(app: tauri::AppHandle, name: String) -> Result<String, String> {
+    let path = notes_dir(&app)?.join(format!("{}.txt", name));
     if path.exists() {
         std::fs::read_to_string(path).map_err(|e| e.to_string())
     } else {
@@ -66,10 +123,51 @@ fn load_notes(app: tauri::AppHandle) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn save_notes(app: tauri::AppHandle, content: String) -> Result<(), String> {
-    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    std::fs::write(dir.join("notes.txt"), content).map_err(|e| e.to_string())
+fn save_note(app: tauri::AppHandle, name: String, content: String) -> Result<(), String> {
+    let dir = notes_dir(&app)?;
+    std::fs::write(dir.join(format!("{}.txt", name)), content).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn create_note(app: tauri::AppHandle, name: String) -> Result<String, String> {
+    let dir = notes_dir(&app)?;
+    let base = if name.trim().is_empty() {
+        "Note".to_string()
+    } else {
+        sanitize_name(&name)?
+    };
+    let mut candidate = base.clone();
+    let mut i = 2usize;
+    loop {
+        let path = dir.join(format!("{}.txt", candidate));
+        if !path.exists() {
+            std::fs::write(&path, "").map_err(|e| e.to_string())?;
+            return Ok(candidate);
+        }
+        candidate = format!("{} {}", base, i);
+        i += 1;
+    }
+}
+
+#[tauri::command]
+fn delete_note(app: tauri::AppHandle, name: String) -> Result<(), String> {
+    let path = notes_dir(&app)?.join(format!("{}.txt", name));
+    if path.exists() {
+        std::fs::remove_file(path).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn rename_note(app: tauri::AppHandle, old_name: String, new_name: String) -> Result<(), String> {
+    let new_name = sanitize_name(&new_name)?;
+    let dir = notes_dir(&app)?;
+    let old_path = dir.join(format!("{}.txt", old_name));
+    let new_path = dir.join(format!("{}.txt", new_name));
+    if new_path.exists() {
+        return Err("A note with that name already exists".into());
+    }
+    std::fs::rename(old_path, new_path).map_err(|e| e.to_string())
 }
 
 fn osascript_cp(password: &str) -> Result<(), String> {
@@ -397,8 +495,12 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
-            load_notes,
-            save_notes,
+            list_notes,
+            load_note,
+            save_note,
+            create_note,
+            delete_note,
+            rename_note,
             read_blocked,
             write_blocked,
             write_blocked_with_password,

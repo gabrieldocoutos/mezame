@@ -15,12 +15,23 @@ struct Reminder {
     title: String,
 }
 
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+struct Task {
+    id: i64,
+    title: String,
+    total_seconds: i64,
+}
+
+type DbShared = Arc<Mutex<rusqlite::Connection>>;
+
 #[derive(Clone, serde::Serialize)]
 struct PomodoroState {
     mode: String,
     remaining: u32,
     running: bool,
     completed_sessions: u32,
+    active_task_id: Option<i64>,
+    active_task_elapsed: u32,
 }
 
 type PomodoroShared = Arc<Mutex<PomodoroState>>;
@@ -368,30 +379,213 @@ async fn complete_reminder(app: tauri::AppHandle, id: String) -> Result<(), Stri
     Ok(())
 }
 
+// ── Task commands ──────────────────────────────────────────────────────────────
+
+#[tauri::command]
+fn get_tasks(db: tauri::State<DbShared>) -> Result<Vec<Task>, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare("SELECT id, title, total_seconds FROM tasks ORDER BY created_at ASC")
+        .map_err(|e| e.to_string())?;
+    let tasks = stmt
+        .query_map([], |row| {
+            Ok(Task {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                total_seconds: row.get(2)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+    Ok(tasks)
+}
+
+#[tauri::command]
+fn create_task(db: tauri::State<DbShared>, title: String) -> Result<Task, String> {
+    let title = title.trim().to_string();
+    if title.is_empty() {
+        return Err("Title cannot be empty".into());
+    }
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    conn.execute(
+        "INSERT INTO tasks (title) VALUES (?1)",
+        rusqlite::params![title],
+    )
+    .map_err(|e| e.to_string())?;
+    let id = conn.last_insert_rowid();
+    Ok(Task { id, title, total_seconds: 0 })
+}
+
+#[tauri::command]
+fn update_task(db: tauri::State<DbShared>, id: i64, title: String) -> Result<Task, String> {
+    let title = title.trim().to_string();
+    if title.is_empty() {
+        return Err("Title cannot be empty".into());
+    }
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    conn.execute(
+        "UPDATE tasks SET title = ?1 WHERE id = ?2",
+        rusqlite::params![title, id],
+    )
+    .map_err(|e| e.to_string())?;
+    let total_seconds: i64 = conn
+        .query_row(
+            "SELECT total_seconds FROM tasks WHERE id = ?1",
+            rusqlite::params![id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(Task { id, title, total_seconds })
+}
+
+#[tauri::command]
+fn delete_task(
+    state: tauri::State<PomodoroShared>,
+    db: tauri::State<DbShared>,
+    id: i64,
+) -> Result<(), String> {
+    {
+        let mut s = state.lock().unwrap();
+        if s.active_task_id == Some(id) {
+            s.active_task_id = None;
+            s.active_task_elapsed = 0;
+        }
+    }
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM tasks WHERE id = ?1", rusqlite::params![id])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn reset_task_time(
+    state: tauri::State<PomodoroShared>,
+    db: tauri::State<DbShared>,
+    id: i64,
+) -> Result<(), String> {
+    {
+        let mut s = state.lock().unwrap();
+        if s.active_task_id == Some(id) {
+            s.active_task_elapsed = 0;
+        }
+    }
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    conn.execute(
+        "UPDATE tasks SET total_seconds = 0 WHERE id = ?1",
+        rusqlite::params![id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn set_active_task(
+    app: tauri::AppHandle,
+    state: tauri::State<PomodoroShared>,
+    db: tauri::State<DbShared>,
+    id: Option<i64>,
+) {
+    let (s, old_id, elapsed) = {
+        let mut s = state.lock().unwrap();
+        let old_id = s.active_task_id;
+        let elapsed = s.active_task_elapsed;
+        s.active_task_elapsed = 0;
+        s.active_task_id = id;
+        (s.clone(), old_id, elapsed)
+    };
+    // Flush accumulated time for the previous task
+    if let Some(tid) = old_id {
+        if elapsed > 0 {
+            if let Ok(conn) = db.lock() {
+                conn.execute(
+                    "UPDATE tasks SET total_seconds = total_seconds + ?1 WHERE id = ?2",
+                    rusqlite::params![elapsed as i64, tid],
+                )
+                .ok();
+            }
+        }
+    }
+    app.emit("pomodoro-tick", &s).ok();
+}
+
+// ── Pomodoro commands ──────────────────────────────────────────────────────────
+
 #[tauri::command]
 fn pomodoro_get_state(state: tauri::State<PomodoroShared>) -> PomodoroState {
     state.lock().unwrap().clone()
 }
 
 #[tauri::command]
-fn pomodoro_toggle(app: tauri::AppHandle, state: tauri::State<PomodoroShared>) {
-    let s = {
+fn pomodoro_toggle(
+    app: tauri::AppHandle,
+    state: tauri::State<PomodoroShared>,
+    db: tauri::State<DbShared>,
+) {
+    let (s, flush_id, flush_elapsed) = {
         let mut s = state.lock().unwrap();
+        let was_running = s.running;
         s.running = !s.running;
-        s.clone()
+        let mut flush_id = None;
+        let mut flush_elapsed = 0u32;
+        // Flush on pause (not on resume)
+        if was_running && s.mode == "work" {
+            if let Some(tid) = s.active_task_id {
+                flush_id = Some(tid);
+                flush_elapsed = s.active_task_elapsed;
+                s.active_task_elapsed = 0;
+            }
+        }
+        (s.clone(), flush_id, flush_elapsed)
     };
+    if let Some(tid) = flush_id {
+        if flush_elapsed > 0 {
+            if let Ok(conn) = db.lock() {
+                conn.execute(
+                    "UPDATE tasks SET total_seconds = total_seconds + ?1 WHERE id = ?2",
+                    rusqlite::params![flush_elapsed as i64, tid],
+                )
+                .ok();
+            }
+        }
+    }
     update_tray_from_state(&app, &s);
     app.emit("pomodoro-tick", &s).ok();
 }
 
 #[tauri::command]
-fn pomodoro_reset(app: tauri::AppHandle, state: tauri::State<PomodoroShared>) {
-    let s = {
+fn pomodoro_reset(
+    app: tauri::AppHandle,
+    state: tauri::State<PomodoroShared>,
+    db: tauri::State<DbShared>,
+) {
+    let (s, flush_id, flush_elapsed) = {
         let mut s = state.lock().unwrap();
+        let mut flush_id = None;
+        let mut flush_elapsed = 0u32;
+        // Flush if we were running in work mode
+        if s.running && s.mode == "work" {
+            if let Some(tid) = s.active_task_id {
+                flush_id = Some(tid);
+                flush_elapsed = s.active_task_elapsed;
+            }
+        }
+        s.active_task_elapsed = 0;
         s.running = false;
         s.remaining = if s.mode == "work" { WORK_SECS } else { BREAK_SECS };
-        s.clone()
+        (s.clone(), flush_id, flush_elapsed)
     };
+    if let Some(tid) = flush_id {
+        if flush_elapsed > 0 {
+            if let Ok(conn) = db.lock() {
+                conn.execute(
+                    "UPDATE tasks SET total_seconds = total_seconds + ?1 WHERE id = ?2",
+                    rusqlite::params![flush_elapsed as i64, tid],
+                )
+                .ok();
+            }
+        }
+    }
     update_tray_from_state(&app, &s);
     app.emit("pomodoro-tick", &s).ok();
 }
@@ -416,6 +610,8 @@ pub fn run() {
         remaining: WORK_SECS,
         running: false,
         completed_sessions: 0,
+        active_task_id: None,
+        active_task_elapsed: 0,
     }));
 
     tauri::Builder::default()
@@ -460,21 +656,50 @@ pub fn run() {
                 })
                 .build(app)?;
 
+            // Initialise SQLite
+            let db_path = app.path().app_data_dir()?.join("tasks.db");
+            let conn = rusqlite::Connection::open(&db_path)?;
+            conn.execute_batch(
+                "PRAGMA journal_mode=WAL;
+                 CREATE TABLE IF NOT EXISTS tasks (
+                     id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                     title        TEXT    NOT NULL,
+                     total_seconds INTEGER NOT NULL DEFAULT 0,
+                     created_at   INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+                 );",
+            )?;
+            let db: DbShared = Arc::new(Mutex::new(conn));
+            app.manage(db);
+
+            // Background timer loop
+            let db_clone = app.state::<DbShared>().inner().clone();
             let pomodoro = app.state::<PomodoroShared>().inner().clone();
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 loop {
                     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                    let state = {
+                    let (state, flush_id, flush_elapsed) = {
                         let mut s = pomodoro.lock().unwrap();
+                        let mut flush_id = None;
+                        let mut flush_elapsed = 0u32;
                         if s.running {
                             if s.remaining > 0 {
                                 s.remaining -= 1;
+                                // Accumulate elapsed in work mode
+                                if s.mode == "work" && s.active_task_id.is_some() {
+                                    s.active_task_elapsed += 1;
+                                }
                             }
                             if s.remaining == 0 {
                                 s.running = false;
                                 if s.mode == "work" {
                                     s.completed_sessions += 1;
+                                    // Flush accumulated time on session complete
+                                    if let Some(tid) = s.active_task_id {
+                                        flush_id = Some(tid);
+                                        flush_elapsed = s.active_task_elapsed;
+                                        s.active_task_elapsed = 0;
+                                    }
                                     s.mode = "break".into();
                                     s.remaining = BREAK_SECS;
                                 } else {
@@ -483,8 +708,19 @@ pub fn run() {
                                 }
                             }
                         }
-                        s.clone()
+                        (s.clone(), flush_id, flush_elapsed)
                     };
+                    if let Some(tid) = flush_id {
+                        if flush_elapsed > 0 {
+                            if let Ok(conn) = db_clone.lock() {
+                                conn.execute(
+                                    "UPDATE tasks SET total_seconds = total_seconds + ?1 WHERE id = ?2",
+                                    rusqlite::params![flush_elapsed as i64, tid],
+                                )
+                                .ok();
+                            }
+                        }
+                    }
                     update_tray_from_state(&app_handle, &state);
                     app_handle.emit("pomodoro-tick", &state).ok();
                 }
@@ -514,6 +750,12 @@ pub fn run() {
             get_reminders,
             create_reminder,
             complete_reminder,
+            get_tasks,
+            create_task,
+            update_task,
+            delete_task,
+            reset_task_time,
+            set_active_task,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

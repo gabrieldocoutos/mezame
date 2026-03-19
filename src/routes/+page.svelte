@@ -4,7 +4,6 @@
   import Pomodoro from "./Pomodoro.svelte";
   import BlockedWebsites from "./BlockedWebsites.svelte";
   import Reminders from "./Reminders.svelte";
-
   let activeTab = $state<'editor' | 'pomodoro' | 'blocked' | 'reminders'>('editor');
 
   let editorDirty = $state(false);

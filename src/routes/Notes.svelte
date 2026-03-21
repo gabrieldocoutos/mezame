@@ -261,7 +261,7 @@
   }
 
   .dirty-dot {
-    color: #569cd6;
+    color: #4ec9b0;
     flex-shrink: 0;
   }
 
@@ -287,7 +287,7 @@
   .rename-input {
     flex: 1;
     background: #3a3a3a;
-    border: 1px solid #569cd6;
+    border: 1px solid #4ec9b0;
     border-radius: 2px;
     color: #d4d4d4;
     font-family: inherit;

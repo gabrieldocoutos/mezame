@@ -252,7 +252,7 @@
   .mode {
     font-size: 11px;
     letter-spacing: 0.25em;
-    color: #569cd6;
+    color: #4ec9b0;
   }
 
   .timer {
@@ -303,7 +303,7 @@
     transition: color 0.3s;
   }
   .dots span.filled {
-    color: #569cd6;
+    color: #4ec9b0;
   }
 
   /* ── Tasks ── */
@@ -346,12 +346,12 @@
   }
 
   .task-row.active {
-    background: #1e2a38;
-    border-color: #2a4060;
+    background: #1e2e2a;
+    border-color: #2a5048;
   }
 
   .task-row.active .task-title {
-    color: #7ec8f0;
+    color: #6fdfc5;
   }
 
   .select-btn {
@@ -440,7 +440,7 @@
   .edit-input {
     flex: 1;
     background: #1e1e1e;
-    border: 1px solid #569cd6;
+    border: 1px solid #4ec9b0;
     border-radius: 3px;
     color: #d4d4d4;
     font-family: inherit;
@@ -470,7 +470,7 @@
   }
 
   .new-input:focus {
-    border-color: #569cd6;
+    border-color: #4ec9b0;
   }
   .new-input::placeholder {
     color: #3a3a3a;

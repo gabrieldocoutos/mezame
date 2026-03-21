@@ -231,7 +231,7 @@
 
   .tab.active {
     color: #d4d4d4;
-    border-bottom-color: #569cd6;
+    border-bottom-color: #4ec9b0;
     background: #2d2d2d;
   }
 
@@ -365,7 +365,7 @@
   }
 
   .modal-input:focus {
-    border-color: #569cd6;
+    border-color: #4ec9b0;
   }
 
   .modal-error {
@@ -381,12 +381,12 @@
   }
 
   .modal-confirm {
-    background: #569cd6;
-    border-color: #569cd6;
+    background: #4ec9b0;
+    border-color: #4ec9b0;
     color: #fff;
   }
 
   .modal-confirm:hover:not(:disabled) {
-    background: #4a8ec2;
+    background: #3dab96;
   }
 </style>

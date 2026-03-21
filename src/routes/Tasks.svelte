@@ -173,7 +173,7 @@
   .edit-input {
     flex: 1;
     background: #1e1e1e;
-    border: 1px solid #569cd6;
+    border: 1px solid #4ec9b0;
     border-radius: 3px;
     color: #d4d4d4;
     font-family: inherit;
@@ -226,7 +226,7 @@
   }
 
   .new-input:focus {
-    border-color: #569cd6;
+    border-color: #4ec9b0;
   }
 
   .new-input::placeholder {

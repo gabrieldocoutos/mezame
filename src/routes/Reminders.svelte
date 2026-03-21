@@ -123,20 +123,20 @@
   }
 
   .add-input:focus {
-    border-color: #569cd6;
+    border-color: #4ec9b0;
   }
 
   .add-btn {
     padding: 5px 12px;
     font-size: 12px;
     border: none;
-    background: #569cd6;
+    background: #4ec9b0;
     color: #fff;
     border-radius: 6px;
   }
 
   .add-btn:hover:not(:disabled) {
-    background: #4a8ec2;
+    background: #3dab96;
   }
 
   .refresh-btn {
@@ -205,7 +205,7 @@
   }
 
   .circle {
-    color: #569cd6;
+    color: #4ec9b0;
     flex-shrink: 0;
     width: 12px;
   }

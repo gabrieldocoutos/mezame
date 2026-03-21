@@ -99,7 +99,7 @@
   }
 
   input:focus {
-    border-color: #569cd6;
+    border-color: #4ec9b0;
   }
 
   input::placeholder {
@@ -127,7 +127,7 @@
   }
 
   .domain {
-    color: #9cdcfe;
+    color: #a8e6cf;
   }
 
   .empty {

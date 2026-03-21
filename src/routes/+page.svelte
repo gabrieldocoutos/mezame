@@ -111,7 +111,18 @@
       >Reminders</button>
     </nav>
 
-    
+  <button
+    class="productivity-switch"
+    class:active={blockingActive}
+    class:toggling
+    onclick={toggleBlocking}
+    disabled={toggling}
+    title={blockingActive ? 'Productivity mode on' : 'Productivity mode off'}
+  >
+    <span class="switch-track">
+      <span class="switch-knob"></span>
+    </span>
+  </button>
   </header>
 
   {#if activeTab === 'editor'}
@@ -250,13 +261,11 @@
   }
 
   .productivity-switch {
-    position: fixed;
-    bottom: 24px;
-    right: 24px;
-    z-index: 100;
+    margin-left: auto;
+    margin-right: 12px;
     background: none;
     border: none;
-    padding: 0;
+    padding: 0 0 4px 0;
     cursor: pointer;
     border-radius: 999px;
     box-shadow: none;

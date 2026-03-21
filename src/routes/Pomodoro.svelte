@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { invoke } from '@tauri-apps/api/core';
-  import { listen } from '@tauri-apps/api/event';
-  import { onDestroy } from 'svelte';
+  import { invoke } from "@tauri-apps/api/core";
+  import { listen } from "@tauri-apps/api/event";
+  import { onDestroy } from "svelte";
 
   const ROUND_SIZE = 4;
 
-  let mode = $state<'work' | 'break'>('work');
+  let mode = $state<"work" | "break">("work");
   let remaining = $state(25 * 60);
   let running = $state(false);
   let completedSessions = $state(0);
@@ -14,12 +14,16 @@
 
   type Task = { id: number; title: string; total_seconds: number };
   let tasks = $state<Task[]>([]);
-  let newTitle = $state('');
+  let newTitle = $state("");
   let editingId = $state<number | null>(null);
-  let editingTitle = $state('');
+  let editingTitle = $state("");
 
-  const minutes = $derived(String(Math.floor(remaining / 60)).padStart(2, '0'));
-  const seconds = $derived(String(remaining % 60).padStart(2, '0'));
+  function focusOnMount(node: HTMLElement) {
+    node.focus();
+  }
+
+  const minutes = $derived(String(Math.floor(remaining / 60)).padStart(2, "0"));
+  const seconds = $derived(String(remaining % 60).padStart(2, "0"));
   const doneInRound = $derived(completedSessions % ROUND_SIZE);
 
   type Payload = {
@@ -32,40 +36,48 @@
   };
 
   function applyState(s: Payload) {
-    const flushed = activeTaskElapsed > 0 && s.active_task_elapsed === 0;
-    mode = s.mode as 'work' | 'break';
+    mode = s.mode as "work" | "break";
     remaining = s.remaining;
     running = s.running;
     completedSessions = s.completed_sessions;
     activeTaskId = s.active_task_id;
     activeTaskElapsed = s.active_task_elapsed;
-    if (flushed) {
-      invoke<Task[]>('get_tasks').then(t => { tasks = t; });
-    }
   }
 
-  invoke<Payload>('pomodoro_get_state').then(applyState);
-  invoke<Task[]>('get_tasks').then(t => { tasks = t; });
+  invoke<Payload>("pomodoro_get_state").then(applyState);
+  invoke<Task[]>("get_tasks").then((t) => {
+    tasks = t;
+  });
 
-  const unlisten = listen<Payload>('pomodoro-tick', ({ payload }) => applyState(payload));
-  onDestroy(async () => { (await unlisten)(); });
+  const unlisten = listen<Payload>("pomodoro-tick", ({ payload }) =>
+    applyState(payload),
+  );
+  onDestroy(async () => {
+    (await unlisten)();
+  });
 
-  function toggle() { invoke('pomodoro_toggle'); }
-  function reset() { invoke('pomodoro_reset'); }
-  function skipBreak() { invoke('pomodoro_skip_break'); }
+  function toggle() {
+    invoke("pomodoro_toggle");
+  }
+  function reset() {
+    invoke("pomodoro_reset");
+  }
+  function skipBreak() {
+    invoke("pomodoro_skip_break");
+  }
 
   async function selectTask(id: number) {
     const next = activeTaskId === id ? null : id;
-    await invoke('set_active_task', { id: next });
-    tasks = await invoke<Task[]>('get_tasks');
+    await invoke("set_active_task", { id: next });
+    tasks = await invoke<Task[]>("get_tasks");
   }
 
   async function addTask() {
     const t = newTitle.trim();
     if (!t) return;
-    const task = await invoke<Task>('create_task', { title: t });
+    const task = await invoke<Task>("create_task", { title: t });
     tasks = [...tasks, task];
-    newTitle = '';
+    newTitle = "";
   }
 
   function startEdit(task: Task, e: MouseEvent) {
@@ -75,26 +87,32 @@
   }
 
   async function saveEdit() {
-    if (editingId === null || !editingTitle.trim()) { editingId = null; return; }
-    const updated = await invoke<Task>('update_task', { id: editingId, title: editingTitle.trim() });
-    tasks = tasks.map(t => t.id === updated.id ? updated : t);
+    if (editingId === null || !editingTitle.trim()) {
+      editingId = null;
+      return;
+    }
+    const updated = await invoke<Task>("update_task", {
+      id: editingId,
+      title: editingTitle.trim(),
+    });
+    tasks = tasks.map((t) => (t.id === updated.id ? updated : t));
     editingId = null;
   }
 
   async function deleteTask(id: number, e: MouseEvent) {
     e.stopPropagation();
-    await invoke('delete_task', { id });
-    tasks = tasks.filter(t => t.id !== id);
+    await invoke("delete_task", { id });
+    tasks = tasks.filter((t) => t.id !== id);
   }
 
   async function resetTime(id: number, e: MouseEvent) {
     e.stopPropagation();
-    await invoke('reset_task_time', { id });
-    tasks = tasks.map(t => t.id === id ? { ...t, total_seconds: 0 } : t);
+    await invoke("reset_task_time", { id });
+    tasks = tasks.map((t) => (t.id === id ? { ...t, total_seconds: 0 } : t));
   }
 
   function fmtDuration(s: number): string {
-    if (s === 0) return '—';
+    if (s === 0) return "—";
     const h = Math.floor(s / 3600);
     const m = Math.floor((s % 3600) / 60);
     const sec = s % 60;
@@ -106,19 +124,19 @@
   function fmtSession(s: number): string {
     const m = Math.floor(s / 60);
     const sec = s % 60;
-    return `${m}:${String(sec).padStart(2, '0')}`;
+    return `${m}:${String(sec).padStart(2, "0")}`;
   }
 </script>
 
 <div class="pomodoro">
   <!-- Timer section -->
   <div class="timer-section">
-    <div class="mode">{mode === 'work' ? 'WORK' : 'BREAK'}</div>
+    <div class="mode">{mode === "work" ? "WORK" : "BREAK"}</div>
     <div class="timer">{minutes}:{seconds}</div>
     <div class="controls">
-      <button onclick={toggle}>{running ? 'Pause' : 'Start'}</button>
+      <button onclick={toggle}>{running ? "Pause" : "Start"}</button>
       <button onclick={reset}>Reset</button>
-      {#if mode === 'break'}
+      {#if mode === "break"}
         <button onclick={skipBreak}>Skip</button>
       {/if}
     </div>
@@ -143,7 +161,7 @@
             class="select-btn"
             class:selected={isActive}
             onclick={() => selectTask(task.id)}
-            title={isActive ? 'Deselect task' : 'Select task'}
+            title={isActive ? "Deselect task" : "Select task"}
           >
             {#if isActive}●{:else}○{/if}
           </button>
@@ -152,25 +170,38 @@
               class="edit-input"
               bind:value={editingTitle}
               onkeydown={(e) => {
-                if (e.key === 'Enter') saveEdit();
-                if (e.key === 'Escape') editingId = null;
+                if (e.key === "Enter") saveEdit();
+                if (e.key === "Escape") editingId = null;
               }}
               onblur={saveEdit}
-              autofocus
+              use:focusOnMount
             />
           {:else}
             <span class="task-title">{task.title}</span>
             <span class="task-time">
               {#if isActive && (running || activeTaskElapsed > 0)}
-                <span class="session-time">{fmtSession(activeTaskElapsed)}</span>
+                <span class="session-time">{fmtSession(activeTaskElapsed)}</span
+                >
               {:else}
                 {fmtDuration(task.total_seconds)}
               {/if}
             </span>
             <div class="task-actions">
-              <button class="icon-btn" onclick={(e) => startEdit(task, e)} title="Rename">✏</button>
-              <button class="icon-btn" onclick={(e) => resetTime(task.id, e)} title="Reset time">↺</button>
-              <button class="icon-btn danger" onclick={(e) => deleteTask(task.id, e)} title="Delete">×</button>
+              <button
+                class="icon-btn"
+                onclick={(e) => startEdit(task, e)}
+                title="Rename">✏</button
+              >
+              <button
+                class="icon-btn"
+                onclick={(e) => resetTime(task.id, e)}
+                title="Reset time">↺</button
+              >
+              <button
+                class="icon-btn danger"
+                onclick={(e) => deleteTask(task.id, e)}
+                title="Delete">×</button
+              >
             </div>
           {/if}
         </div>
@@ -186,9 +217,11 @@
         class="new-input"
         bind:value={newTitle}
         placeholder="New task..."
-        onkeydown={(e) => e.key === 'Enter' && addTask()}
+        onkeydown={(e) => e.key === "Enter" && addTask()}
       />
-      <button class="add-btn" onclick={addTask} disabled={!newTitle.trim()}>Add</button>
+      <button class="add-btn" onclick={addTask} disabled={!newTitle.trim()}
+        >Add</button
+      >
     </div>
   </div>
 </div>
@@ -265,8 +298,13 @@
     font-size: 16px;
   }
 
-  .dots span { color: #383838; transition: color 0.3s; }
-  .dots span.filled { color: #569cd6; }
+  .dots span {
+    color: #383838;
+    transition: color 0.3s;
+  }
+  .dots span.filled {
+    color: #569cd6;
+  }
 
   /* ── Tasks ── */
   .task-section {
@@ -431,8 +469,12 @@
     outline: none;
   }
 
-  .new-input:focus { border-color: #569cd6; }
-  .new-input::placeholder { color: #3a3a3a; }
+  .new-input:focus {
+    border-color: #569cd6;
+  }
+  .new-input::placeholder {
+    color: #3a3a3a;
+  }
 
   .add-btn {
     background: #3a3a3a;

@@ -9,7 +9,6 @@
 
   let local = $state<string[]>([]);
   let newDomain = $state("");
-  let saving = $state(false);
   let error = $state<string | null>(null);
 
   // Sync local copy when parent domains change (including initial load)
@@ -17,32 +16,19 @@
     local = [...domains];
   });
 
-  function add() {
+  async function add() {
     const domain = newDomain.trim().toLowerCase();
     if (!domain || local.includes(domain)) return;
     local = [...local, domain];
     newDomain = "";
-  }
-
-  function remove(domain: string) {
-    local = local.filter((d) => d !== domain);
-  }
-
-  async function save() {
-    saving = true;
     error = null;
-    try {
-      await onSave(local);
-    } catch (e: unknown) {
-      const msg = String(e);
-      if (msg.includes("Cancelled")) {
-        error = "Save cancelled.";
-      } else {
-        error = "Could not save: " + msg;
-      }
-    } finally {
-      saving = false;
-    }
+    try { await onSave(local); } catch (e: unknown) { error = "Could not save: " + String(e); }
+  }
+
+  async function remove(domain: string) {
+    local = local.filter((d) => d !== domain);
+    error = null;
+    try { await onSave(local); } catch (e: unknown) { error = "Could not save: " + String(e); }
   }
 
   function onInputKeyDown(e: KeyboardEvent) {
@@ -75,14 +61,11 @@
     </ul>
   {/if}
 
-  <div class="footer">
-    {#if error}
+  {#if error}
+    <div class="footer">
       <span class="error">{error}</span>
-    {/if}
-    <button class="save" onclick={save} disabled={saving}>
-      {saving ? "Saving…" : "Save"}
-    </button>
-  </div>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -204,7 +187,4 @@
     color: #f48771;
   }
 
-  .save {
-    padding: 4px 16px;
-  }
 </style>

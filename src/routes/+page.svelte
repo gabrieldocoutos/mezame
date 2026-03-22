@@ -40,6 +40,8 @@
 
   // Track whether focus was auto-activated by pomodoro
   let focusAutoActivated = $state(false);
+  // Track if pomodoro is currently in work mode
+  let pomodoroWorking = $state(false);
 
   // Password modal state
   let showPasswordModal = $state(false);
@@ -94,6 +96,7 @@
         toggleBlocking(true);
       }
       prevPomodoroWork = isWorking;
+      pomodoroWorking = isWorking;
     });
     return () => { unlisten.then((fn) => fn()); };
   });
@@ -194,8 +197,8 @@
       class:active={blockingActive}
       class:toggling
       onclick={() => toggleBlocking()}
-      disabled={toggling}
-      title={blockingActive ? 'Distracting sites are blocked' : 'Click to block distracting sites'}
+      disabled={toggling || (pomodoroWorking && blockingActive)}
+      title={pomodoroWorking && blockingActive ? 'Focus cannot be disabled while Pomodoro is running' : blockingActive ? 'Distracting sites are blocked' : 'Click to block distracting sites'}
     >
       <span class="switch-track">
         <span class="switch-knob"></span>

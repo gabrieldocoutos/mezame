@@ -42,12 +42,11 @@ fn update_tray_from_state(app: &tauri::AppHandle, s: &PomodoroState) {
     } else if !s.running && s.mode == "break" && s.remaining == BREAK_SECS {
         String::new()
     } else {
-        let m = s.remaining / 60;
-        let sec = s.remaining % 60;
+        let m = (s.remaining + 59) / 60; // round up so it shows 1 until truly 0
         if s.running {
-            format!("{:02}:{:02}", m, sec)
+            format!("{}m", m)
         } else {
-            format!("⏸ {:02}:{:02}", m, sec)
+            format!("⏸ {}m", m)
         }
     };
     if let Some(tray) = app.tray_by_id("main") {

@@ -5,12 +5,12 @@
   import Notes from "./Notes.svelte";
   import Pomodoro from "./Pomodoro.svelte";
   import BlockedWebsites from "./BlockedWebsites.svelte";
-  import Reminders from "./Reminders.svelte";
+  import Todo from "./Todo.svelte";
   import ShortcutGuide from "./ShortcutGuide.svelte";
   import { CircleHelp } from "lucide-svelte";
-  let activeTab = $state<'notes' | 'pomodoro' | 'blocked' | 'reminders'>('notes');
+  let activeTab = $state<'notes' | 'pomodoro' | 'blocked' | 'todo'>('notes');
   let showShortcutGuide = $state(false);
-  const tabs: Array<typeof activeTab> = ['notes', 'pomodoro', 'blocked', 'reminders'];
+  const tabs: Array<typeof activeTab> = ['notes', 'pomodoro', 'blocked', 'todo'];
 
   function onTabKeyDown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
@@ -185,9 +185,9 @@
       >Blocked</button>
       <button
         class="tab"
-        class:active={activeTab === 'reminders'}
-        onclick={() => activeTab = 'reminders'}
-      >Reminders</button>
+        class:active={activeTab === 'todo'}
+        onclick={() => activeTab = 'todo'}
+      >TODO</button>
     </nav>
 
   <div class="productivity-toggle">
@@ -214,7 +214,7 @@
   {:else if activeTab === 'blocked'}
     <BlockedWebsites domains={blockedDomains} onSave={saveBlocked} />
   {:else}
-    <Reminders />
+    <Todo />
   {/if}
 </div>
 

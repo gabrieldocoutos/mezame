@@ -389,6 +389,44 @@ fn complete_reminder(db: tauri::State<DbShared>, id: i64) -> Result<(), String> 
     Ok(())
 }
 
+#[tauri::command]
+fn get_completed_reminders(db: tauri::State<DbShared>) -> Result<Vec<Reminder>, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare("SELECT id, title FROM reminders WHERE completed = 1 ORDER BY created_at DESC")
+        .map_err(|e| e.to_string())?;
+    let reminders = stmt
+        .query_map([], |row| {
+            Ok(Reminder {
+                id: row.get(0)?,
+                title: row.get(1)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+    Ok(reminders)
+}
+
+#[tauri::command]
+fn delete_reminder(db: tauri::State<DbShared>, id: i64) -> Result<(), String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    conn.execute(
+        "DELETE FROM reminders WHERE id = ?1",
+        rusqlite::params![id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn clear_completed_reminders(db: tauri::State<DbShared>) -> Result<(), String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM reminders WHERE completed = 1", [])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 // ── Task commands ──────────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -777,6 +815,9 @@ pub fn run() {
             get_reminders,
             create_reminder,
             complete_reminder,
+            get_completed_reminders,
+            delete_reminder,
+            clear_completed_reminders,
             get_tasks,
             create_task,
             update_task,

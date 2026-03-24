@@ -5,6 +5,7 @@
   import Notes from "./Notes.svelte";
   import Pomodoro from "./Pomodoro.svelte";
   import BlockedWebsites from "./BlockedWebsites.svelte";
+  import BlockedApps from "./BlockedApps.svelte";
   import Todo from "./Todo.svelte";
   import ShortcutGuide from "./ShortcutGuide.svelte";
   import { CircleHelp } from "lucide-svelte";
@@ -53,6 +54,7 @@
 
   // Blocked websites state
   let blockedDomains = $state<string[]>([]);
+  let blockedApps = $state<string[]>([]);
   let blockingActive = $state(false);
   let toggling = $state(false);
 
@@ -96,6 +98,9 @@
     invoke<string[]>("read_domains").then((domains) => {
       blockedDomains = domains;
     });
+    invoke<string[]>("read_blocked_apps")
+      .then((apps) => { blockedApps = apps; })
+      .catch(() => {});
     invoke<boolean>("get_blocking_status").then((active) => {
       blockingActive = active;
     });
@@ -111,6 +116,7 @@
           event.payload.running && event.payload.mode === "work";
         if (isWorking && !prevPomodoroWork && !blockingActive && !toggling) {
           focusAutoActivated = true;
+          invoke("set_focus_active", { active: true }).catch(() => {});
           toggleBlocking(true);
         } else if (
           !isWorking &&
@@ -120,6 +126,7 @@
           !toggling
         ) {
           focusAutoActivated = false;
+          invoke("set_focus_active", { active: false }).catch(() => {});
           toggleBlocking(true);
         }
         prevPomodoroWork = isWorking;
@@ -139,29 +146,42 @@
     }
   }
 
+  async function saveBlockedApps(apps: string[]) {
+    await invoke("save_blocked_apps", { apps });
+    blockedApps = apps;
+  }
+
   async function toggleBlocking(auto = false) {
     toggling = true;
     if (!auto && blockingActive) {
       // Manual deactivation clears auto flag
       focusAutoActivated = false;
     }
-    const domains = blockingActive ? [] : blockedDomains;
+    const newActive = !blockingActive;
+    const domains = newActive ? blockedDomains : [];
     let needModal = false;
-    try {
-      await invoke("write_blocked", { domains });
-      blockingActive = await invoke<boolean>("get_blocking_status");
-    } catch (e) {
-      if (e === "NeedPassword") {
-        needModal = true;
-        pendingDomains = domains;
-        pendingPassword = "";
-        passwordError = "";
-        showPasswordModal = true;
-      } else if (e !== "Cancelled") {
-        alert("Error: " + e);
+
+    // Only modify /etc/hosts if there are domains to block/unblock
+    if (blockedDomains.length > 0) {
+      try {
+        await invoke("write_blocked", { domains });
+      } catch (e) {
+        if (e === "NeedPassword") {
+          needModal = true;
+          pendingDomains = domains;
+          pendingPassword = "";
+          passwordError = "";
+          showPasswordModal = true;
+        } else if (e !== "Cancelled") {
+          alert("Error: " + e);
+        }
       }
-    } finally {
-      if (!needModal) toggling = false;
+    }
+
+    if (!needModal) {
+      blockingActive = newActive;
+      invoke("set_focus_active", { active: newActive }).catch(() => {});
+      toggling = false;
     }
   }
 
@@ -172,7 +192,8 @@
         domains: pendingDomains,
         password: pendingPassword,
       });
-      blockingActive = await invoke<boolean>("get_blocking_status");
+      blockingActive = true;
+      invoke("set_focus_active", { active: true }).catch(() => {});
       showPasswordModal = false;
     } catch (e) {
       if (e === "WrongPassword") {
@@ -250,7 +271,16 @@
   {:else if activeTab === "pomodoro"}
     <Pomodoro isActive={true} />
   {:else if activeTab === "blocked"}
-    <BlockedWebsites domains={blockedDomains} onSave={saveBlocked} />
+    <div class="blocked-container">
+      <div class="blocked-section">
+        <h3 class="section-title">Websites</h3>
+        <BlockedWebsites domains={blockedDomains} onSave={saveBlocked} />
+      </div>
+      <div class="blocked-section">
+        <h3 class="section-title">Apps</h3>
+        <BlockedApps apps={blockedApps} onSave={saveBlockedApps} />
+      </div>
+    </div>
   {:else}
     <Todo />
   {/if}
@@ -597,5 +627,31 @@
     color: #d4d4d4;
     border-color: #555;
     background: #3a3a3a;
+  }
+
+  .blocked-container {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .blocked-section {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .section-title {
+    font-size: 11px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 8px 20px 0;
+    margin: 0;
+    flex-shrink: 0;
+    font-weight: 500;
   }
 </style>

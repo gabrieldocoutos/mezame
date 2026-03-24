@@ -32,6 +32,7 @@ struct PomodoroState {
     completed_sessions: u32,
     active_task_id: Option<i64>,
     active_task_elapsed: u32,
+    focus_active: bool,
 }
 
 type PomodoroShared = Arc<Mutex<PomodoroState>>;
@@ -316,6 +317,74 @@ fn save_domains(app: tauri::AppHandle, domains: Vec<String>) -> Result<(), Strin
     std::fs::write(dir.join("domains.txt"), domains.join("\n")).map_err(|e| e.to_string())
 }
 
+// ── Blocked apps persistence ─────────────────────────────────────────────────
+
+#[tauri::command]
+fn read_blocked_apps(app: tauri::AppHandle) -> Result<Vec<String>, String> {
+    let path = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("blocked_apps.txt");
+    if path.exists() {
+        let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+        let apps: Vec<String> = text
+            .lines()
+            .map(|l| l.trim().to_string())
+            .filter(|l| !l.is_empty())
+            .collect();
+        return Ok(apps);
+    }
+    Ok(vec![])
+}
+
+#[tauri::command]
+fn save_blocked_apps(app: tauri::AppHandle, apps: Vec<String>) -> Result<(), String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    std::fs::write(dir.join("blocked_apps.txt"), apps.join("\n")).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn list_installed_apps() -> Result<Vec<String>, String> {
+    let output = std::process::Command::new("ls")
+        .arg("/Applications/")
+        .output()
+        .map_err(|e| e.to_string())?;
+    let text = String::from_utf8_lossy(&output.stdout);
+    let mut apps: Vec<String> = text
+        .lines()
+        .filter(|l| l.ends_with(".app"))
+        .map(|l| l.trim_end_matches(".app").to_string())
+        .collect();
+    apps.sort();
+    Ok(apps)
+}
+
+// ── Focus mode & app killing ─────────────────────────────────────────────────
+
+#[tauri::command]
+fn set_focus_active(state: tauri::State<PomodoroShared>, active: bool) {
+    state.lock().unwrap().focus_active = active;
+}
+
+fn kill_blocked_apps(app_data_dir: &std::path::Path) {
+    let path = app_data_dir.join("blocked_apps.txt");
+    if !path.exists() {
+        return;
+    }
+    let text = match std::fs::read_to_string(&path) {
+        Ok(t) => t,
+        Err(_) => return,
+    };
+    for app_name in text.lines().map(|l| l.trim()).filter(|l| !l.is_empty()) {
+        std::process::Command::new("pkill")
+            .arg("-x")
+            .arg(app_name)
+            .output()
+            .ok();
+    }
+}
 
 #[tauri::command]
 fn get_blocking_status() -> bool {
@@ -665,6 +734,7 @@ pub fn run() {
         completed_sessions: 0,
         active_task_id: None,
         active_task_elapsed: 0,
+        focus_active: false,
     }));
 
     tauri::Builder::default()
@@ -741,7 +811,9 @@ pub fn run() {
             let db_clone = app.state::<DbShared>().inner().clone();
             let pomodoro = app.state::<PomodoroShared>().inner().clone();
             let app_handle = app.handle().clone();
+            let app_data_dir = app.path().app_data_dir().unwrap_or_default();
             tauri::async_runtime::spawn(async move {
+                let mut kill_counter: u32 = 0;
                 loop {
                     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                     let (state, flush_id, flush_elapsed) = {
@@ -789,6 +861,15 @@ pub fn run() {
                     }
                     update_tray_from_state(&app_handle, &state);
                     app_handle.emit("pomodoro-tick", &state).ok();
+
+                    // Kill blocked apps every 3 seconds when focus is active
+                    kill_counter += 1;
+                    if kill_counter >= 3 {
+                        kill_counter = 0;
+                        if state.focus_active {
+                            kill_blocked_apps(&app_data_dir);
+                        }
+                    }
                 }
             });
 
@@ -807,6 +888,10 @@ pub fn run() {
             write_blocked_with_password,
             read_domains,
             save_domains,
+            read_blocked_apps,
+            save_blocked_apps,
+            list_installed_apps,
+            set_focus_active,
             get_blocking_status,
             pomodoro_get_state,
             pomodoro_toggle,

@@ -841,10 +841,11 @@ pub fn run() {
                 let mut kill_counter: u32 = 0;
                 loop {
                     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                    let (state, flush_id, flush_elapsed) = {
+                    let (state, flush_id, flush_elapsed, timer_finished) = {
                         let mut s = pomodoro.lock().unwrap();
                         let mut flush_id = None;
                         let mut flush_elapsed = 0u32;
+                        let mut timer_finished = false;
                         if s.running {
                             if s.remaining > 0 {
                                 s.remaining -= 1;
@@ -855,6 +856,7 @@ pub fn run() {
                             }
                             if s.remaining == 0 {
                                 s.running = false;
+                                timer_finished = true;
                                 if s.mode == "work" {
                                     s.completed_sessions += 1;
                                     // Flush accumulated time on session complete
@@ -871,7 +873,7 @@ pub fn run() {
                                 }
                             }
                         }
-                        (s.clone(), flush_id, flush_elapsed)
+                        (s.clone(), flush_id, flush_elapsed, timer_finished)
                     };
                     if let Some(tid) = flush_id {
                         if flush_elapsed > 0 {
@@ -882,6 +884,12 @@ pub fn run() {
                                 )
                                 .ok();
                             }
+                        }
+                    }
+                    if timer_finished {
+                        if let Some(window) = app_handle.get_webview_window("main") {
+                            window.show().unwrap_or_default();
+                            window.set_focus().unwrap_or_default();
                         }
                     }
                     update_tray_from_state(&app_handle, &state);

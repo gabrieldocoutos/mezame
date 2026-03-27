@@ -181,13 +181,14 @@
     flex: 1;
     display: flex;
     min-height: 0;
+    background: #131313;
   }
 
   .sidebar {
-    width: 160px;
+    width: 200px;
     flex-shrink: 0;
-    background: #252526;
-    border-right: 1px solid #3d3d3d;
+    background: rgba(32, 31, 31, 0.8);
+    backdrop-filter: blur(12px);
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -197,32 +198,31 @@
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    padding: 4px 6px;
-    border-bottom: 1px solid #3d3d3d;
+    padding: 8px 10px;
     flex-shrink: 0;
   }
 
   .new-btn {
     background: transparent;
     border: none;
-    color: #888;
+    color: #86948f;
     font-size: 18px;
     line-height: 1;
     cursor: pointer;
-    padding: 1px 5px;
-    border-radius: 3px;
-    font-family: inherit;
+    padding: 4px 6px;
+    border-radius: 4px;
+    font-family: "Inter", sans-serif;
   }
 
   .new-btn:hover {
-    color: #d4d4d4;
-    background: #3a3a3a;
+    color: #6de5cb;
+    background: rgba(109, 229, 203, 0.08);
   }
 
   .note-list {
     list-style: none;
     margin: 0;
-    padding: 4px 0;
+    padding: 4px 8px;
     overflow-y: auto;
     flex: 1;
   }
@@ -231,22 +231,33 @@
     display: flex;
     align-items: center;
     position: relative;
+    border-radius: 6px;
+    margin-bottom: 2px;
   }
 
   .note-item:hover .del-btn {
     opacity: 1;
   }
 
+  .note-item.active {
+    background: rgba(109, 229, 203, 0.06);
+    border-left: 2px solid #6de5cb;
+  }
+
+  .note-item:not(.active) {
+    border-left: 2px solid transparent;
+  }
+
   .note-btn {
     flex: 1;
     background: transparent;
     border: none;
-    color: #9d9d9d;
+    color: #86948f;
     text-align: left;
-    padding: 5px 10px;
+    padding: 8px 10px;
     font-size: 12px;
     cursor: pointer;
-    font-family: inherit;
+    font-family: "Inter", sans-serif;
     overflow: hidden;
     display: flex;
     align-items: center;
@@ -256,13 +267,15 @@
   }
 
   .note-btn:hover {
-    background: #2a2d2e;
-    color: #d4d4d4;
+    color: #e5e2e1;
+  }
+
+  .note-item:not(.active):hover {
+    background: rgba(255, 255, 255, 0.03);
   }
 
   .note-item.active .note-btn {
-    color: #d4d4d4;
-    background: #37373d;
+    color: #e5e2e1;
   }
 
   .note-name {
@@ -270,41 +283,44 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-family: "Space Grotesk", sans-serif;
+    font-weight: 500;
+    font-size: 13px;
   }
 
   .dirty-dot {
-    color: #4ec9b0;
+    color: #6de5cb;
     flex-shrink: 0;
   }
 
   .del-btn {
     background: transparent;
     border: none;
-    color: #666;
+    color: #86948f;
     font-size: 14px;
     cursor: pointer;
     padding: 4px 6px;
     opacity: 0;
-    transition: opacity 0.1s;
-    font-family: inherit;
+    transition: opacity 0.15s;
+    font-family: "Inter", sans-serif;
     flex-shrink: 0;
-    border-radius: 0;
+    border-radius: 4px;
   }
 
   .del-btn:hover {
-    color: #f48771;
-    background: transparent;
+    color: #ffb4ab;
+    background: rgba(255, 180, 171, 0.08);
   }
 
   .rename-input {
     flex: 1;
-    background: #3a3a3a;
-    border: 1px solid #4ec9b0;
-    border-radius: 2px;
-    color: #d4d4d4;
-    font-family: inherit;
-    font-size: 12px;
-    padding: 3px 6px;
+    background: #2a2a2a;
+    border: 1px solid #6de5cb;
+    border-radius: 4px;
+    color: #e5e2e1;
+    font-family: "Space Grotesk", sans-serif;
+    font-size: 13px;
+    padding: 6px 8px;
     margin: 2px 4px;
     outline: none;
     min-width: 0;
@@ -313,19 +329,19 @@
 
   textarea {
     flex: 1;
-    padding: 16px 20px;
-    background: #1e1e1e;
-    color: #d4d4d4;
+    padding: 24px 32px;
+    background: #131313;
+    color: #e5e2e1;
     border: none;
     outline: none;
     resize: none;
-    font-family: "Menlo", "Monaco", "Courier New", monospace;
+    font-family: "JetBrains Mono", "Menlo", "Monaco", "Courier New", monospace;
     font-size: 14px;
-    line-height: 1.6;
+    line-height: 1.7;
     tab-size: 2;
   }
 
   textarea::placeholder {
-    color: #555;
+    color: #86948f;
   }
 </style>

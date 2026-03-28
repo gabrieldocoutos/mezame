@@ -44,5 +44,5 @@ jobs:
           tagName: v__VERSION__
           releaseName: "Mezame v__VERSION__"
           releaseBody: "See the assets below to download and install."
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false

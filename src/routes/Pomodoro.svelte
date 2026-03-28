@@ -208,7 +208,6 @@
       </div>
 
       <div class="timer-wrapper">
-        <div class="timer-glow"></div>
         <h1 class="timer-display">{minutes}:{seconds}</h1>
         <div class="round-info">
           <span class="round-label">Round</span>
@@ -430,15 +429,6 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-  }
-
-  .timer-glow {
-    position: absolute;
-    inset: -24px;
-    background: rgba(109, 229, 203, 0.04);
-    filter: blur(40px);
-    border-radius: 50%;
-    pointer-events: none;
   }
 
   .timer-display {

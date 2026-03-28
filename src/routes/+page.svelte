@@ -8,6 +8,7 @@
   import Todo from "./Todo.svelte";
   import ShortcutGuide from "./ShortcutGuide.svelte";
   import { CircleHelp } from "lucide-svelte";
+  import UpdateChecker from "./UpdateChecker.svelte";
   let activeTab = $state<"notes" | "pomodoro" | "blocked" | "todo">("notes");
   let showShortcutGuide = $state(false);
   const tabs: Array<typeof activeTab> = [
@@ -340,6 +341,8 @@
 {#if showShortcutGuide}
   <ShortcutGuide onclose={() => (showShortcutGuide = false)} />
 {/if}
+
+<UpdateChecker />
 
 <style>
   * {

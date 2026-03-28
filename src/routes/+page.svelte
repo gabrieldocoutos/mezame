@@ -370,7 +370,7 @@
   header {
     display: flex;
     align-items: center;
-    background: #2d2d2d;
+    background: yellow;
     border-bottom: 1px solid #3d3d3d;
     flex-shrink: 0;
     user-select: none;

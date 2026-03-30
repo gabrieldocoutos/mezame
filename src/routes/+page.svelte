@@ -354,7 +354,7 @@
   :global(html),
   :global(body) {
     overflow: hidden;
-    background: yellow;
+    background: #1e1e1e;
     margin: 0;
   }
 
@@ -362,7 +362,7 @@
     display: flex;
     flex-direction: column;
     height: 100vh;
-    background: yellow;
+    background: #1e1e1e;
     color: #d4d4d4;
     font-family: "Inter", sans-serif;
   }
@@ -370,7 +370,7 @@
   header {
     display: flex;
     align-items: center;
-    background: yellow;
+    background: #2d2d2d;
     border-bottom: 1px solid #3d3d3d;
     flex-shrink: 0;
     user-select: none;

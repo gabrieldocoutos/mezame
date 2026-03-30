@@ -169,7 +169,6 @@
     </div>
   {/if}
 
-  <div class="watermark">SYSTEM.<br/>IDLE.</div>
 </div>
 
 <style>
@@ -464,20 +463,6 @@
   }
 
   /* ---- Watermark ---- */
-  .watermark {
-    position: absolute;
-    bottom: 32px;
-    right: 32px;
-    font-family: "Space Grotesk", "Inter", sans-serif;
-    font-size: 4rem;
-    font-weight: 700;
-    color: rgba(255, 255, 255, 0.03);
-    line-height: 1;
-    text-align: right;
-    pointer-events: none;
-    user-select: none;
-    letter-spacing: -0.02em;
-  }
 
   /* ---- States ---- */
   .hint {

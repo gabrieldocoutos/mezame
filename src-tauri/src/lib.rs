@@ -183,6 +183,63 @@ fn rename_note(app: tauri::AppHandle, old_name: String, new_name: String) -> Res
     std::fs::rename(old_path, new_path).map_err(|e| e.to_string())
 }
 
+// --- Filesystem commands for markdown editor ---
+
+#[tauri::command]
+fn read_file(path: String) -> Result<String, String> {
+    std::fs::read_to_string(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn write_file(path: String, content: String) -> Result<(), String> {
+    std::fs::write(&path, content).map_err(|e| e.to_string())
+}
+
+fn recent_files_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.join("recent_files.json"))
+}
+
+#[tauri::command]
+fn get_recent_files(app: tauri::AppHandle) -> Result<Vec<String>, String> {
+    let path = recent_files_path(&app)?;
+    if !path.exists() {
+        return Ok(vec![]);
+    }
+    let raw = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    serde_json::from_str(&raw).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn add_recent_file(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    let json_path = recent_files_path(&app)?;
+    let mut list: Vec<String> = if json_path.exists() {
+        let raw = std::fs::read_to_string(&json_path).map_err(|e| e.to_string())?;
+        serde_json::from_str(&raw).unwrap_or_default()
+    } else {
+        vec![]
+    };
+    list.retain(|p| p != &path);
+    list.insert(0, path);
+    list.truncate(20);
+    let raw = serde_json::to_string(&list).map_err(|e| e.to_string())?;
+    std::fs::write(&json_path, raw).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn remove_recent_file(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    let json_path = recent_files_path(&app)?;
+    if !json_path.exists() {
+        return Ok(());
+    }
+    let raw = std::fs::read_to_string(&json_path).map_err(|e| e.to_string())?;
+    let mut list: Vec<String> = serde_json::from_str(&raw).unwrap_or_default();
+    list.retain(|p| p != &path);
+    let raw = serde_json::to_string(&list).map_err(|e| e.to_string())?;
+    std::fs::write(&json_path, raw).map_err(|e| e.to_string())
+}
+
 fn osascript_cp(password: &str) -> Result<(), String> {
     let escaped = password.replace('\\', "\\\\").replace('"', "\\\"");
     let script = format!(
@@ -908,6 +965,7 @@ pub fn run() {
 
             Ok(())
         })
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
@@ -946,6 +1004,11 @@ pub fn run() {
             reset_task_time,
             set_active_task,
             app_exit,
+            read_file,
+            write_file,
+            get_recent_files,
+            add_recent_file,
+            remove_recent_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

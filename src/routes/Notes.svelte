@@ -1,347 +1,359 @@
 <script lang="ts">
-  import { invoke } from "@tauri-apps/api/core";
-  import { Plus, X } from "lucide-svelte";
+  import { onMount } from 'svelte'
+  import { invoke } from '@tauri-apps/api/core'
+  import { open, save } from '@tauri-apps/plugin-dialog'
+  import { FolderOpen, FilePlus, Save, X } from 'lucide-svelte'
+  import Editor from './Editor.svelte'
 
-  let { isDirty = $bindable(false), isActive }: { isDirty?: boolean; isActive: boolean } = $props();
+  interface Props {
+    isDirty?: boolean
+    isActive?: boolean
+  }
 
-  let notes = $state<string[]>([]);
-  let activeNote = $state<string | null>(null);
-  let content = $state("");
-  let savedContent = $state("");
-  let renamingNote = $state<string | null>(null);
-  let renameValue = $state("");
+  let { isDirty = $bindable(false), isActive = false }: Props = $props()
+
+  let recentFiles = $state<string[]>([])
+  let currentFile = $state<string | null>(null)
+  let content = $state('')
+  let savedContent = $state('')
 
   $effect(() => {
-    isDirty = content !== savedContent;
-  });
+    isDirty = content !== savedContent
+  })
 
-  $effect(() => {
-    invoke<string[]>("list_notes").then((list) => {
-      notes = list;
-      if (list.length > 0) selectNote(list[0]);
-    });
-  });
-
-  async function selectNote(name: string) {
-    if (activeNote !== null && activeNote !== name && content !== savedContent) {
-      await invoke("save_note", { name: activeNote, content });
-    }
-    activeNote = name;
-    const text = await invoke<string>("load_note", { name });
-    content = text;
-    savedContent = text;
+  function basename(path: string): string {
+    return path.split('/').pop() ?? path
   }
 
-  async function save() {
-    if (!activeNote) return;
-    try {
-      await invoke("save_note", { name: activeNote, content });
-      savedContent = content;
-    } catch (e) {
-      alert("Could not save: " + e);
-    }
+  async function loadRecents() {
+    recentFiles = await invoke<string[]>('get_recent_files')
   }
 
-  async function createNote() {
-    try {
-      const name = await invoke<string>("create_note", { name: "" });
-      notes = await invoke<string[]>("list_notes");
-      await selectNote(name);
-    } catch (e) {
-      alert("Could not create note: " + e);
-    }
-  }
-
-  async function deleteNote(name: string, e: MouseEvent) {
-    e.stopPropagation();
-    if (notes.length <= 1) return;
-    try {
-      await invoke("delete_note", { name });
-      const remaining = notes.filter(n => n !== name);
-      notes = remaining;
-      if (activeNote === name) await selectNote(remaining[0]);
-    } catch (e) {
-      alert("Could not delete: " + e);
-    }
-  }
-
-  function startRename(name: string) {
-    renamingNote = name;
-    renameValue = name;
-  }
-
-  async function confirmRename() {
-    if (!renamingNote) return;
-    const trimmed = renameValue.trim();
-    if (!trimmed || trimmed === renamingNote) {
-      renamingNote = null;
-      return;
+  async function openFile(path: string) {
+    if (isDirty) {
+      const ok = confirm(`Save changes to ${basename(currentFile!)} before opening another file?`)
+      if (ok) await saveCurrentFile()
     }
     try {
-      await invoke("rename_note", { oldName: renamingNote, newName: trimmed });
-      const idx = notes.indexOf(renamingNote);
-      const updated = [...notes];
-      updated[idx] = trimmed;
-      notes = updated;
-      if (activeNote === renamingNote) activeNote = trimmed;
+      const text = await invoke<string>('read_file', { path })
+      currentFile = path
+      content = text
+      savedContent = text
+      await invoke('add_recent_file', { path })
+      await loadRecents()
     } catch (e) {
-      alert("Could not rename: " + e);
+      alert(`Could not open file: ${e}`)
     }
-    renamingNote = null;
   }
 
-  function focusSelect(node: HTMLInputElement) {
-    node.focus();
-    node.select();
+  async function handleOpen() {
+    const selected = await open({
+      multiple: false,
+      filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }],
+    })
+    if (selected && typeof selected === 'string') {
+      await openFile(selected)
+    }
   }
 
-  function onKeyDown(e: KeyboardEvent) {
-    if (!isActive) return;
-    if ((e.metaKey || e.ctrlKey) && e.key === "s") {
-      e.preventDefault();
-      save();
-    }
-    if ((e.metaKey || e.ctrlKey) && e.key === "n") {
-      e.preventDefault();
-      createNote();
-    }
-    if (e.ctrlKey && !e.metaKey) {
-      const num = parseInt(e.key);
-      if (num >= 1 && num <= notes.length) {
-        e.preventDefault();
-        selectNote(notes[num - 1]);
-      }
+  async function handleNew() {
+    const path = await save({
+      filters: [{ name: 'Markdown', extensions: ['md'] }],
+      defaultPath: 'untitled.md',
+    })
+    if (!path) return
+    try {
+      await invoke('write_file', { path, content: '' })
+      await openFile(path)
+    } catch (e) {
+      alert(`Could not create file: ${e}`)
     }
   }
+
+  async function saveCurrentFile() {
+    if (!currentFile) return
+    try {
+      await invoke('write_file', { path: currentFile, content })
+      savedContent = content
+    } catch (e) {
+      alert(`Could not save file: ${e}`)
+    }
+  }
+
+  async function handleRemoveRecent(path: string, e: MouseEvent) {
+    e.stopPropagation()
+    await invoke('remove_recent_file', { path })
+    await loadRecents()
+  }
+
+  function handleKeydown(e: KeyboardEvent) {
+    if (!isActive) return
+    if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+      e.preventDefault()
+      saveCurrentFile()
+    }
+  }
+
+  onMount(() => {
+    loadRecents()
+  })
 </script>
 
-<svelte:window onkeydown={onKeyDown} />
+<svelte:window onkeydown={handleKeydown} />
 
-<div class="editor-layout">
-  <aside class="sidebar">
-    <div class="sidebar-header">
-      <button class="new-btn" onclick={createNote} title="New note"><Plus size={16} /></button>
+<div class="notes-container">
+  <div class="sidebar">
+    <div class="sidebar-actions">
+      <button class="icon-btn" title="Open file (⌘O)" onclick={handleOpen}>
+        <FolderOpen size={14} />
+        <span>Open</span>
+      </button>
+      <button class="icon-btn" title="New file" onclick={handleNew}>
+        <FilePlus size={14} />
+        <span>New</span>
+      </button>
     </div>
-    <ul class="note-list">
-      {#each notes as name (name)}
-        <li class="note-item" class:active={activeNote === name}>
-          {#if renamingNote === name}
-            <input
-              class="rename-input"
-              bind:value={renameValue}
-              use:focusSelect
-              onblur={confirmRename}
-              onkeydown={(e) => {
-                if (e.key === 'Enter') { e.preventDefault(); confirmRename(); }
-                if (e.key === 'Escape') { e.preventDefault(); renamingNote = null; }
-              }}
-            />
-          {:else}
-            <button
-              class="note-btn"
-              onclick={() => selectNote(name)}
-              ondblclick={() => startRename(name)}
-            >
-              <span class="note-name">{name}</span>
-              {#if activeNote === name && isDirty}
-                <span class="dirty-dot">•</span>
-              {/if}
-            </button>
-            {#if notes.length > 1}
-              <button class="del-btn" onclick={(e) => deleteNote(name, e)} title="Delete"><X size={12} /></button>
-            {/if}
-          {/if}
-        </li>
-      {/each}
-    </ul>
-  </aside>
 
-  <textarea
-    bind:value={content}
-    spellcheck="false"
-    autocomplete="off"
-    placeholder="Start typing..."
-    onkeydown={(e) => {
-      if (e.key === 'Tab') {
-        e.preventDefault();
-        const el = e.currentTarget;
-        const start = el.selectionStart;
-        const end = el.selectionEnd;
-        content = content.slice(0, start) + '    ' + content.slice(end);
-        requestAnimationFrame(() => {
-          el.selectionStart = el.selectionEnd = start + 4;
-        });
-      }
-    }}
-  ></textarea>
+    <div class="sidebar-label">Recent</div>
+
+    {#if recentFiles.length === 0}
+      <div class="empty-state">No recent files.<br />Open or create a .md file.</div>
+    {:else}
+      <ul class="file-list">
+        {#each recentFiles as path}
+          <li
+            class="file-item"
+            class:active={path === currentFile}
+            title={path}
+            onclick={() => openFile(path)}
+          >
+            <span class="file-name">{basename(path)}</span>
+            <button
+              class="remove-btn"
+              title="Remove from recents"
+              onclick={(e) => handleRemoveRecent(path, e)}
+            >
+              <X size={11} />
+            </button>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+  </div>
+
+  <div class="editor-area">
+    <div class="editor-toolbar">
+      <span class="filename">
+        {#if currentFile}
+          {basename(currentFile)}{isDirty ? ' •' : ''}
+        {:else}
+          <span class="no-file">No file open</span>
+        {/if}
+      </span>
+      <button
+        class="save-btn"
+        disabled={!isDirty || !currentFile}
+        onclick={saveCurrentFile}
+        title="Save (⌘S)"
+      >
+        <Save size={13} />
+        Save
+      </button>
+    </div>
+
+    {#if currentFile}
+      <div class="editor-wrapper">
+        <Editor bind:value={content} />
+      </div>
+    {:else}
+      <div class="placeholder">
+        <p>Open a .md file to start editing</p>
+      </div>
+    {/if}
+  </div>
 </div>
 
 <style>
-  .editor-layout {
-    flex: 1;
+  .notes-container {
     display: flex;
-    min-height: 0;
+    height: 100%;
     background: #131313;
+    color: #d4d4d4;
+    font-family: 'JetBrains Mono', Menlo, Monaco, 'Courier New', monospace;
+    overflow: hidden;
   }
 
+  /* Sidebar */
   .sidebar {
     width: 200px;
-    flex-shrink: 0;
-    background: rgba(32, 31, 31, 0.8);
-    backdrop-filter: blur(12px);
+    min-width: 200px;
+    border-right: 1px solid #2a2a2a;
     display: flex;
     flex-direction: column;
     overflow: hidden;
   }
 
-  .sidebar-header {
+  .sidebar-actions {
+    display: flex;
+    gap: 4px;
+    padding: 10px 8px 6px;
+    border-bottom: 1px solid #2a2a2a;
+  }
+
+  .icon-btn {
     display: flex;
     align-items: center;
-    justify-content: flex-end;
-    padding: 8px 10px;
-    flex-shrink: 0;
-  }
-
-  .new-btn {
-    background: transparent;
-    border: none;
-    color: #86948f;
-    font-size: 18px;
-    line-height: 1;
-    cursor: pointer;
-    padding: 4px 6px;
+    gap: 5px;
+    padding: 5px 8px;
+    background: #1e1e1e;
+    border: 1px solid #3d3d3d;
     border-radius: 4px;
-    font-family: "Inter", sans-serif;
+    color: #d4d4d4;
+    font-size: 11px;
+    font-family: inherit;
+    cursor: pointer;
+    flex: 1;
+    justify-content: center;
   }
 
-  .new-btn:hover {
-    color: #6de5cb;
-    background: rgba(109, 229, 203, 0.08);
+  .icon-btn:hover {
+    background: #2a2a2a;
+    border-color: #4ec9b0;
+    color: #4ec9b0;
   }
 
-  .note-list {
+  .sidebar-label {
+    padding: 8px 10px 4px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #6a6a6a;
+  }
+
+  .empty-state {
+    padding: 10px;
+    font-size: 11px;
+    color: #555;
+    line-height: 1.6;
+  }
+
+  .file-list {
     list-style: none;
     margin: 0;
-    padding: 4px 8px;
+    padding: 0;
     overflow-y: auto;
     flex: 1;
   }
 
-  .note-item {
+  .file-item {
     display: flex;
     align-items: center;
-    position: relative;
-    border-radius: 0;
-    margin-bottom: 2px;
-  }
-
-  .note-item:hover .del-btn {
-    opacity: 1;
-  }
-
-  .note-item.active {
-    background: rgba(109, 229, 203, 0.06);
-    border-left: 2px solid #6de5cb;
-  }
-
-  .note-item:not(.active) {
-    border-left: 2px solid transparent;
-  }
-
-  .note-btn {
-    flex: 1;
-    background: transparent;
-    border: none;
-    color: #86948f;
-    text-align: left;
-    padding: 8px 10px;
-    font-size: 12px;
+    padding: 5px 6px 5px 10px;
     cursor: pointer;
-    font-family: "Inter", sans-serif;
-    overflow: hidden;
-    display: flex;
-    align-items: center;
+    font-size: 12px;
+    color: #b0b0b0;
     gap: 4px;
-    border-radius: 0;
-    min-width: 0;
   }
 
-  .note-btn:hover {
-    color: #e5e2e1;
+  .file-item:hover {
+    background: #1e1e1e;
+    color: #d4d4d4;
   }
 
-  .note-item:not(.active):hover {
-    background: rgba(255, 255, 255, 0.03);
+  .file-item.active {
+    background: #1e2a29;
+    color: #4ec9b0;
   }
 
-  .note-item.active .note-btn {
-    color: #e5e2e1;
-  }
-
-  .note-name {
+  .file-name {
     flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-family: "Space Grotesk", sans-serif;
-    font-weight: 500;
-    font-size: 13px;
   }
 
-  .dirty-dot {
-    color: #6de5cb;
-    flex-shrink: 0;
-  }
-
-  .del-btn {
-    background: transparent;
+  .remove-btn {
+    background: none;
     border: none;
-    color: #86948f;
-    font-size: 14px;
+    color: #555;
     cursor: pointer;
-    padding: 4px 6px;
-    opacity: 0;
-    transition: opacity 0.15s;
-    font-family: "Inter", sans-serif;
+    padding: 2px;
+    display: flex;
+    align-items: center;
+    border-radius: 3px;
     flex-shrink: 0;
-    border-radius: 4px;
   }
 
-  .del-btn:hover {
-    color: #ffb4ab;
-    background: rgba(255, 180, 171, 0.08);
+  .remove-btn:hover {
+    color: #e06c75;
+    background: #2a1a1a;
   }
 
-  .rename-input {
+  /* Editor area */
+  .editor-area {
     flex: 1;
-    background: #2a2a2a;
-    border: 1px solid #6de5cb;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .editor-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px;
+    border-bottom: 1px solid #2a2a2a;
+    height: 34px;
+    flex-shrink: 0;
+  }
+
+  .filename {
+    font-size: 12px;
+    color: #9a9a9a;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .no-file {
+    color: #555;
+  }
+
+  .save-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    background: #1e2a29;
+    border: 1px solid #4ec9b0;
     border-radius: 4px;
-    color: #e5e2e1;
-    font-family: "Space Grotesk", sans-serif;
+    color: #4ec9b0;
+    font-size: 11px;
+    font-family: inherit;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .save-btn:hover:not(:disabled) {
+    background: #264040;
+  }
+
+  .save-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+
+  .editor-wrapper {
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .placeholder {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #444;
     font-size: 13px;
-    padding: 6px 8px;
-    margin: 2px 4px;
-    outline: none;
-    min-width: 0;
-    width: calc(100% - 8px);
-  }
-
-  textarea {
-    flex: 1;
-    padding: 24px 32px;
-    background: #131313;
-    color: #e5e2e1;
-    border: none;
-    outline: none;
-    resize: none;
-    font-family: "JetBrains Mono", "Menlo", "Monaco", "Courier New", monospace;
-    font-size: 14px;
-    line-height: 1.7;
-    tab-size: 2;
-  }
-
-  textarea::placeholder {
-    color: #86948f;
   }
 </style>

@@ -92,6 +92,10 @@
       e.preventDefault()
       saveCurrentFile()
     }
+    if ((e.metaKey || e.ctrlKey) && e.key === 'n') {
+      e.preventDefault()
+      handleNew()
+    }
   }
 
   onMount(() => {
@@ -108,7 +112,7 @@
         <FolderOpen size={14} />
         <span>Open</span>
       </button>
-      <button class="icon-btn" title="New file" onclick={handleNew}>
+      <button class="icon-btn" title="New file (⌘N)" onclick={handleNew}>
         <FilePlus size={14} />
         <span>New</span>
       </button>

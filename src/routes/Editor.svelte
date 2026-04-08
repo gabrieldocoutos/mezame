@@ -21,7 +21,6 @@
 
   let el: HTMLDivElement
   let view: EditorView
-  let ignoreNext = false
 
   const mezameTheme = EditorView.theme(
     {
@@ -147,7 +146,6 @@
         mezameHighlight,
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
-            ignoreNext = true
             const newVal = update.state.doc.toString()
             value = newVal
             onchange?.(newVal)
@@ -161,10 +159,6 @@
   $effect(() => {
     if (!view) return
     const current = view.state.doc.toString()
-    if (ignoreNext) {
-      ignoreNext = false
-      return
-    }
     if (value !== current) {
       view.dispatch({
         changes: { from: 0, to: current.length, insert: value },

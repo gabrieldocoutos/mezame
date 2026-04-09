@@ -26,7 +26,8 @@
   }
 
   async function loadRecents() {
-    recentFiles = await invoke<string[]>('get_recent_files')
+    const files = await invoke<string[]>('get_recent_files')
+    recentFiles = files.sort((a, b) => basename(a).localeCompare(basename(b)))
   }
 
   async function openFile(path: string) {

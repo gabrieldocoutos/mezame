@@ -297,6 +297,7 @@
   /* Editor area */
   .editor-area {
     flex: 1;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -350,6 +351,7 @@
 
   .editor-wrapper {
     flex: 1;
+    min-width: 0;
     overflow: hidden;
   }
 

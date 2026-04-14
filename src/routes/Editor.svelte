@@ -142,6 +142,7 @@
       extensions: [
         setup,
         markdown(),
+        EditorView.lineWrapping,
         mezameTheme,
         mezameHighlight,
         EditorView.updateListener.of((update) => {

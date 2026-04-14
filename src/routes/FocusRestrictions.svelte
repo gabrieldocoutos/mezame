@@ -25,7 +25,6 @@
   let error = $state<string | null>(null);
   let showSuggestions = $state(false);
   let viewMode = $state<"grid" | "list">("grid");
-  let showAll = $state(false);
 
   $effect(() => {
     localDomains = [...domains];
@@ -47,8 +46,6 @@
     ...localDomains.map((d) => ({ name: d, type: "domain" as const })),
     ...localApps.map((a) => ({ name: a, type: "app" as const })),
   ]);
-
-  let visibleItems = $derived(showAll ? allItems : allItems.slice(0, 4));
 
   let filtered = $derived(
     entryType === "app" && newEntry.trim()
@@ -207,7 +204,7 @@
         <p class="empty">No restricted entries yet.</p>
       {:else if viewMode === "grid"}
         <div class="card-grid">
-          {#each visibleItems as item (item.type + ":" + item.name)}
+          {#each allItems as item (item.type + ":" + item.name)}
             <div class="card">
               <button class="card-remove" onclick={() => remove(item)}>
                 <X size={14} />
@@ -229,7 +226,7 @@
         </div>
       {:else}
         <div class="list-view">
-          {#each visibleItems as item (item.type + ":" + item.name)}
+          {#each allItems as item (item.type + ":" + item.name)}
             <div class="list-item">
               <div class="list-icon">
                 {#if item.type === "domain"}
@@ -251,11 +248,6 @@
         </div>
       {/if}
 
-      {#if allItems.length > 4 && !showAll}
-        <button class="load-all" onclick={() => (showAll = true)}>
-          Load all restricted entries
-        </button>
-      {/if}
     </div>
   </div>
 </div>
@@ -655,24 +647,6 @@
   .list-remove:hover {
     color: #ffb4ab;
     background: rgba(147, 0, 10, 0.15);
-  }
-
-  .load-all {
-    background: transparent;
-    border: none;
-    color: #86948f;
-    font-size: 0.75rem;
-    font-family: "Space Grotesk", "Inter", sans-serif;
-    cursor: pointer;
-    padding: 16px 0;
-    text-align: center;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    transition: color 0.15s;
-  }
-
-  .load-all:hover {
-    color: #6de5cb;
   }
 
   /* Scrollbar */

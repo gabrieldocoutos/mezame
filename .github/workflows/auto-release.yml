@@ -8,6 +8,7 @@ on:
 jobs:
   auto-release:
     runs-on: ubuntu-latest
+    environment: TAURI_SIGNING_PRIVATE_KEY
     permissions:
       contents: write
     steps:

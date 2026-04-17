@@ -381,6 +381,9 @@
     display: flex;
     flex-direction: column;
     padding: 0 24px;
+    max-width: 960px;
+    width: 100%;
+    margin: 0 auto;
   }
 
   /* ── Hero Timer ── */

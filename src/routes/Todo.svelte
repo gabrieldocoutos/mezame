@@ -86,6 +86,7 @@
 </script>
 
 <div class="todo">
+  <div class="content">
   <PageHeader title="Todo">
     {#snippet subtitle()}
       Capture what needs to be done so nothing slips through.
@@ -169,6 +170,7 @@
     </div>
   {/if}
 
+  </div>
 </div>
 
 <style>
@@ -182,6 +184,16 @@
     color: #e5e2e1;
     font-family: "Inter", sans-serif;
     position: relative;
+  }
+
+  .content {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    max-width: 960px;
+    margin: 0 auto;
   }
 
 

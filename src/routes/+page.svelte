@@ -37,7 +37,8 @@
     if (
       e.key === "?" &&
       target.tagName !== "INPUT" &&
-      target.tagName !== "TEXTAREA"
+      target.tagName !== "TEXTAREA" &&
+      !target.isContentEditable
     ) {
       showShortcutGuide = !showShortcutGuide;
       return;

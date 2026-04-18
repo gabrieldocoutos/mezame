@@ -2,8 +2,9 @@
   import { onMount } from 'svelte'
   import { invoke } from '@tauri-apps/api/core'
   import { open, save } from '@tauri-apps/plugin-dialog'
-  import { FolderOpen, FilePlus, Save, X } from 'lucide-svelte'
+  import { FolderOpen, FilePlus, Save, X, FileDown } from 'lucide-svelte'
   import Editor from './Editor.svelte'
+  import { exportToPdf } from '$lib/exportPdf'
 
   interface Props {
     isDirty?: boolean
@@ -81,6 +82,12 @@
     }
   }
 
+  async function handleExportPdf() {
+    if (!currentFile) return
+    const name = basename(currentFile).replace(/\.(md|markdown)$/i, '')
+    await exportToPdf(content, name || 'untitled')
+  }
+
   async function handleRemoveRecent(path: string, e: MouseEvent) {
     e.stopPropagation()
     await invoke('remove_recent_file', { path })
@@ -96,6 +103,10 @@
     if ((e.metaKey || e.ctrlKey) && e.key === 'n') {
       e.preventDefault()
       handleNew()
+    }
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'E' || e.key === 'e')) {
+      e.preventDefault()
+      handleExportPdf()
     }
   }
 
@@ -155,15 +166,26 @@
           <span class="no-file">No file open</span>
         {/if}
       </span>
-      <button
-        class="save-btn"
-        disabled={!isDirty || !currentFile}
-        onclick={saveCurrentFile}
-        title="Save (⌘S)"
-      >
-        <Save size={13} />
-        Save
-      </button>
+      <div class="toolbar-actions">
+        <button
+          class="save-btn"
+          disabled={!currentFile}
+          onclick={handleExportPdf}
+          title="Export PDF (⌘⇧E)"
+        >
+          <FileDown size={13} />
+          Export
+        </button>
+        <button
+          class="save-btn"
+          disabled={!isDirty || !currentFile}
+          onclick={saveCurrentFile}
+          title="Save (⌘S)"
+        >
+          <Save size={13} />
+          Save
+        </button>
+      </div>
     </div>
 
     {#if currentFile}
@@ -335,6 +357,12 @@
 
   .no-file {
     color: #555;
+  }
+
+  .toolbar-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
   }
 
   .save-btn {

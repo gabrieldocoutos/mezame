@@ -22,6 +22,7 @@ export const SHORTCUTS: ShortcutGroup[] = [
     shortcuts: [
       { keys: ['⌘', 'S'], description: 'Save note' },
       { keys: ['⌘', 'N'], description: 'New note' },
+      { keys: ['⌘', '⇧', 'E'], description: 'Export as PDF' },
       { keys: ['Ctrl', '1–N'], description: 'Select note by number' },
       { keys: ['Tab'], description: 'Insert spaces in editor' },
     ],

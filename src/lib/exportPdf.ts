@@ -1,11 +1,23 @@
 import { Marked } from 'marked'
+import { markedHighlight } from 'marked-highlight'
+import hljs from 'highlight.js/lib/common'
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
 import { invoke } from '@tauri-apps/api/core'
 import { save } from '@tauri-apps/plugin-dialog'
 import gfmCss from 'github-markdown-css/github-markdown-light.css?raw'
+import hljsCss from 'highlight.js/styles/github.css?raw'
 
-const marked = new Marked()
+const marked = new Marked(
+  markedHighlight({
+    langPrefix: 'hljs language-',
+    emptyLangClass: 'hljs',
+    highlight(code, lang) {
+      const language = lang && hljs.getLanguage(lang) ? lang : 'plaintext'
+      return hljs.highlight(code, { language }).value
+    },
+  }),
+)
 marked.setOptions({ gfm: true, breaks: false })
 
 const RENDER_WIDTH_PX = 800
@@ -43,7 +55,7 @@ function buildContainer(bodyHtml: string): HTMLDivElement {
   wrapper.className = 'export-root'
 
   const style = document.createElement('style')
-  style.textContent = `${gfmCss}\n${PRINT_OVERRIDES}`
+  style.textContent = `${gfmCss}\n${hljsCss}\n${PRINT_OVERRIDES}`
   wrapper.appendChild(style)
 
   const body = document.createElement('div')

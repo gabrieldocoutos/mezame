@@ -26,14 +26,35 @@ jobs:
           fi
           VERSION="${LATEST#v}"
           IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
-          NEW_TAG="v${MAJOR}.${MINOR}.$((PATCH + 1))"
-          echo "tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
+          NEW_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
+          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$NEW_VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Push tag to trigger release workflow
+      - name: Bump version in source files
+        env:
+          NEW_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          tmp=$(mktemp)
+          jq --arg v "$NEW_VERSION" '.version = $v' package.json > "$tmp" && mv "$tmp" package.json
+          jq --arg v "$NEW_VERSION" '.version = $v' src-tauri/tauri.conf.json > "$tmp" && mv "$tmp" src-tauri/tauri.conf.json
+          sed -i '0,/^version = ".*"/s//version = "'"$NEW_VERSION"'"/' src-tauri/Cargo.toml
+          awk -v ver="$NEW_VERSION" '
+            /^name = "mezame"$/ { found = 1 }
+            found && /^version = "/ { sub(/"[^"]*"/, "\"" ver "\""); found = 0 }
+            { print }
+          ' src-tauri/Cargo.lock > "$tmp" && mv "$tmp" src-tauri/Cargo.lock
+
+      - name: Commit bump and push tag to trigger release
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
+          NEW_TAG: ${{ steps.version.outputs.tag }}
+          NEW_VERSION: ${{ steps.version.outputs.version }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag "${{ steps.version.outputs.tag }}"
-          git push https://x-access-token:${GH_PAT}@github.com/${{ github.repository }}.git "${{ steps.version.outputs.tag }}"
+          git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock
+          git commit -m "chore(release): bump version to ${NEW_VERSION}"
+          git tag "$NEW_TAG"
+          REMOTE="https://x-access-token:${GH_PAT}@github.com/${{ github.repository }}.git"
+          git push "$REMOTE" HEAD:${{ github.ref_name }}
+          git push "$REMOTE" "$NEW_TAG"

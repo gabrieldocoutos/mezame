@@ -39,6 +39,8 @@
     "codemirror": "^6.0.2",
     "github-markdown-css": "^5.9.0",
     "highlight.js": "^11.11.1",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^4.2.1",
     "lucide-svelte": "^0.577.0",
     "marked": "^18.0.2",
     "marked-highlight": "^2.2.4"

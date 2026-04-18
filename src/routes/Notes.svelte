@@ -148,9 +148,9 @@
 
   <div class="editor-area">
     <div class="editor-toolbar">
-      <span class="filename">
+      <span class="filename" title={currentFile ?? ''}>
         {#if currentFile}
-          {basename(currentFile)}{isDirty ? ' •' : ''}
+          <span class="path">&lrm;{currentFile}&lrm;</span>{isDirty ? ' •' : ''}
         {:else}
           <span class="no-file">No file open</span>
         {/if}
@@ -317,8 +317,20 @@
     font-size: 12px;
     color: #9a9a9a;
     overflow: hidden;
-    text-overflow: ellipsis;
     white-space: nowrap;
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    align-items: baseline;
+    gap: 2px;
+  }
+
+  .path {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    direction: rtl;
+    text-align: left;
+    min-width: 0;
   }
 
   .no-file {
